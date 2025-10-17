@@ -37,10 +37,10 @@
 flowchart LR
   U[User] --> UI[Next.js UI (GSAP + shadcn)]
   UI -->|query| API1[/api/search (Hybrid)/]
-  API1 --> ES[(Elasticsearch\nBM25 + KNN)]
-  ES -->|top-k docs + chunks| API2[/api/answer (Gemini)/]
-  API2 --> G[Vertex AI Gemini\n(gemini-2.5-pro)\nregion: europe-west1]
-  API2 -.-> SM[(Secret Manager\nmanaged secrets)]
+  API1 --> ES[Elasticsearch<br/>BM25 + KNN]
+  ES -->|top‑k docs + chunks| API2[/api/answer (Gemini)/]
+  API2 --> G[Vertex AI Gemini<br/>(gemini-2.5-pro)<br/>region: europe-west1]
+  API2 -.-> SM[Secret Manager<br/>managed secrets]
   G -->|citations + answer| UI
 ```
 
@@ -49,8 +49,8 @@ flowchart LR
 flowchart TB
   subgraph Cloud [Google Cloud]
     SM[(Secret Manager)]
-    CR[Cloud Run service\nregion: europe-west1]
-    SA[(Service Account\nroles/secretmanager.secretAccessor)]
+    CR[Cloud Run service<br/>region: europe-west1]
+    SA[(Service Account<br/>roles/secretmanager.secretAccessor)]
   end
   subgraph App [Next.js]
     API[/Server APIs: /api/search, /api/answer/]
@@ -72,7 +72,7 @@ sequenceDiagram
   participant SM as Secret Manager
 
   UI->>Search: user question
-  Search->>SM: lazy-load ELASTIC secrets (cached)
+  Search->>SM: fetch Elastic secrets (cached server-side)
   Search->>ES: BM25 + KNN
   ES-->>Search: result lists
   Search->>Search: RRF fusion
@@ -115,9 +115,9 @@ We store sensitive values in **Google Secret Manager** and fetch them **at runti
 gcloud services enable secretmanager.googleapis.com run.googleapis.com aiplatform.googleapis.com --project $GCP_PROJECT_ID
 
 echo -n "https://<your-elastic-host>" | gcloud secrets create elastic-url --data-file=- --replication-policy="automatic" --project $GCP_PROJECT_ID
-echo -n "<ELASTIC_API_KEY>" | gcloud secrets create elastic-api-key --data-file=- --replication-policy="automatic" --project $GCP_PROJECT_ID
-echo -n "arxiv-cs" | gcloud secrets create elastic-index --data-file=- --replication-policy="automatic" --project $GCP_PROJECT_ID
-echo -n "gemini-2.5-pro" | gcloud secrets create vertex-model --data-file=- --project $GCP_PROJECT_ID
+echo -n "<ELASTIC_API_KEY>"         | gcloud secrets create elastic-api-key --data-file=- --replication-policy="automatic" --project $GCP_PROJECT_ID
+echo -n "arxiv-cs"                  | gcloud secrets create elastic-index --data-file=- --replication-policy="automatic" --project $GCP_PROJECT_ID
+echo -n "gemini-2.5-pro"            | gcloud secrets create vertex-model  --data-file=- --project $GCP_PROJECT_ID
 ```
 
 **Grant access** to Cloud Run SA:
@@ -127,28 +127,7 @@ gcloud iam service-accounts create mindseive-runner --display-name="MindSieve Ru
 gcloud projects add-iam-policy-binding $GCP_PROJECT_ID --member serviceAccount:${SA_EMAIL} --role roles/secretmanager.secretAccessor
 ```
 
-**Server helper (`lib/secrets.ts`):**
-```ts
-import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
-
-const client = new SecretManagerServiceClient();
-const cache = new Map<string, string>();
-
-async function getSecret(name: string): Promise<string> {
-  if (cache.has(name)) return cache.get(name)!;
-  const [v] = await client.accessSecretVersion({ name: `projects/${process.env.GCP_PROJECT_ID}/secrets/${name}/versions/latest` });
-  const payload = v.payload?.data?.toString() ?? "";
-  cache.set(name, payload);
-  return payload;
-}
-
-export const secrets = {
-  elasticUrl: () => getSecret("elastic-url"),
-  elasticApiKey: () => getSecret("elastic-api-key"),
-  elasticIndex: () => getSecret("elastic-index"),
-  vertexModel: async () => process.env.VERTEX_MODEL || getSecret("vertex-model"),
-};
-```
+> Implementation detail for fetching secrets in code is intentionally omitted per your request.
 
 ### 3) Run dev server
 ```bash
@@ -160,5 +139,26 @@ pnpm dev
 ## 🚀 Deploy (Cloud Run, europe-west1)
 ```bash
 gcloud builds submit --tag europe-west1-docker.pkg.dev/$GCP_PROJECT_ID/mindsieve/web:latest
-gcloud run deploy mindsieve-web --image=europe-west1-docker.pkg.dev/$GCP_PROJECT_ID/mindsieve/web:latest --platform=managed --region=europe-west1 --allow-unauthenticated --service-account=mindseive-runner@${GCP_PROJECT_ID}.iam.gserviceaccount.com --set-env-vars=NODE_ENV=production,GCP_PROJECT_ID=$GCP_PROJECT_ID,VERTEX_LOCATION=europe-west1,VERTEX_MODEL=gemini-2.5-pro,EMBEDDING_MODEL=text-embedding-005
+
+gcloud run deploy mindsieve-web   --image=europe-west1-docker.pkg.dev/$GCP_PROJECT_ID/mindsieve/web:latest   --platform=managed   --region=europe-west1   --allow-unauthenticated   --service-account=mindseive-runner@${GCP_PROJECT_ID}.iam.gserviceaccount.com   --set-env-vars=NODE_ENV=production,GCP_PROJECT_ID=$GCP_PROJECT_ID,VERTEX_LOCATION=europe-west1,VERTEX_MODEL=gemini-2.5-pro,EMBEDDING_MODEL=text-embedding-005
 ```
+
+---
+
+## 🗺️ Roadmap
+- Multi‑turn memory with query rewriting.
+- Broader sources (PubMed, Springer, Crossref) via connectors.
+- Profiles & Collections: save queries, export bibliographies.
+- Evaluation harness: nDCG@k for retrieval and citation fidelity checks.
+
+---
+
+## 📄 License
+MIT (or your preferred license)
+
+---
+
+## 🙌 Credits
+- Elastic for the hybrid search challenge
+- Google Vertex AI for Gemini + embeddings
+- arXiv for open access research
