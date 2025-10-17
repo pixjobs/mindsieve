@@ -11,13 +11,13 @@
 ### System Flow
 ```mermaid
 flowchart LR
-  user([User]) --> ui[Next.js UI]
-  ui -->|query| api_search[API /search (hybrid)]
-  api_search --> es[Elasticsearch BM25 + KNN]
-  es -->|top k docs + chunks| api_answer[API /answer (Gemini)]
-  api_answer --> gemini[Vertex AI Gemini europe-west1]
-  api_answer -.-> secrets[Secret Manager]
-  gemini -->|citations + answer| ui
+  user([User]) --> ui["Next.js UI"]
+  ui -->|query| api_search["API /search (hybrid)"]
+  api_search --> es["Elasticsearch BM25 + KNN"]
+  es -->|"top k docs + chunks"| api_answer["API /answer (Gemini)"]
+  api_answer --> gemini["Vertex AI Gemini europe-west1"]
+  api_answer -.-> secrets["Secret Manager"]
+  gemini -->|"citations + answer"| ui
 ```
 
 ### Secrets & Runtime Access
