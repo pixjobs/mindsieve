@@ -1,0 +1,52 @@
+# Docker-related files
+Dockerfile
+.dockerignore
+
+# Git version control
+.git
+.gitignore
+
+# Project dependencies
+# These are installed during the build process inside the container
+node_modules
+
+# Next.js build output
+# This directory is generated inside the container during the build
+.next
+
+# Optional: Source maps
+*.map
+
+# Local environment variables
+# These should be passed in during runtime, not built into the image
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Test files
+coverage
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+jest.config.js
+jest.setup.js
+playwright.config.ts
+playwright-report/
+test-results/
+
+
+# Documentation and configuration
+README.md
+.eslintrc.json
+.prettierrc
+tsconfig.json
+next-env.d.ts
+
+# Editor and OS-specific files
+.vscode
+.idea
+.DS_Store
+*.swp
