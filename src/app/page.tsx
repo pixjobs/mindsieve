@@ -93,7 +93,10 @@ const WelcomeAnimation = () => {
       .to(title.chars, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', stagger: { each: 0.05, from: 'start' } }, "-=0.5")
       .to('.welcome-fade-in', { opacity: 1, y: 0, duration: 0.5, stagger: 0.15 }, "-=0.5");
     }, containerRef);
-    return () => ctx.revert();
+
+    return () => {
+      ctx.revert();
+    };
   }, []);
 
   return (
@@ -121,7 +124,10 @@ const StreamingIndicator = () => {
   useLayoutEffect(() => {
     const tl = gsap.timeline({ repeat: -1, yoyo: true });
     tl.to(orbRef.current, { scale: 1.3, opacity: 0.5, duration: 0.8, ease: 'power1.inOut' });
-    return () => tl.kill();
+
+    return () => {
+      tl.kill();
+    };
   }, []);
   return (
     <div className="flex items-center gap-2">
@@ -178,7 +184,6 @@ function ChatMessage({ message }: { message: Message }) {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
-    setHasCopied(true);
     toast.success('Copied to clipboard!');
     setTimeout(() => setHasCopied(false), 2000);
   };
