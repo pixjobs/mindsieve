@@ -37,30 +37,51 @@ async function timed<T>(step: string, reqId: string, fn: () => Promise<T>): Prom
 /** ── Clients (singletons) ──────────────────────────────── */
 let clients: { vertexAI: VertexAI; esClient: ElasticsearchClient } | null = null;
 
-let secretCache: { esUrl: string; esApiKey: string } | null = null;
-let fetchingSecrets = false;
-let secretWaiters: Array<(v: typeof secretCache) => void> = [];
+/** ── Secrets (cached, concurrency-safe) ────────────────── */
+interface Secrets {
+  esUrl: string;
+  esApiKey: string;
+}
+let secretCache: Secrets | null = null;
+let fetchingPromise: Promise<Secrets> | null = null;
 
-async function getSecrets(reqId: string): Promise<{ esUrl: string; esApiKey: string }> {
-  if (secretCache) return secretCache!;
-  if (fetchingSecrets) return new Promise(res => secretWaiters.push(res));
-  fetchingSecrets = true;
+async function getSecrets(reqId: string): Promise<Secrets> {
+  // 1. Return from cache if available.
+  if (secretCache) return secretCache;
 
-  const sm = new SecretManagerServiceClient();
-  const read = async (name: string) => {
-    const [v] = await sm.accessSecretVersion({ name: `projects/${config.GCP_PROJECT_ID}/secrets/${name}/versions/latest` });
-    const s = v.payload?.data?.toString();
-    if (!s) throw new Error(`Secret ${name} is empty`);
-    return s;
+  // 2. If a fetch is already in progress, await the existing promise.
+  if (fetchingPromise) return fetchingPromise;
+
+  // 3. Initiate the fetch, storing the promise.
+  const fetcher = async (): Promise<Secrets> => {
+    const sm = new SecretManagerServiceClient();
+    const read = async (name: string) => {
+      const [v] = await sm.accessSecretVersion({ name: `projects/${config.GCP_PROJECT_ID}/secrets/${name}/versions/latest` });
+      const s = v.payload?.data?.toString();
+      if (!s) throw new Error(`Secret ${name} is empty`);
+      return s;
+    };
+
+    try {
+      const [esUrl, esApiKey] = await Promise.all([read(config.ES_URL_SECRET_NAME), read(config.ES_API_KEY_SECRET_NAME)]);
+      secretCache = { esUrl, esApiKey };
+      logInfo('Secrets cached in memory', reqId);
+      return secretCache;
+    } catch (error) {
+      logError('Failed to fetch secrets from Secret Manager', reqId, error);
+      // Re-throw to ensure callers know the fetch failed.
+      throw error;
+    }
   };
 
-  const [esUrl, esApiKey] = await Promise.all([ read(config.ES_URL_SECRET_NAME), read(config.ES_API_KEY_SECRET_NAME) ]);
-  secretCache = { esUrl, esApiKey };
-  fetchingSecrets = false;
-  secretWaiters.forEach(fn => fn(secretCache));
-  secretWaiters = [];
-  logInfo('Secrets cached in memory', reqId);
-  return secretCache!;
+  try {
+    fetchingPromise = fetcher();
+    return await fetchingPromise;
+  } finally {
+    // 4. IMPORTANT: Once the promise resolves or rejects, clear it.
+    // This allows a re-fetch attempt on subsequent calls if it failed.
+    fetchingPromise = null;
+  }
 }
 
 async function initializeClients(reqId: string) {
