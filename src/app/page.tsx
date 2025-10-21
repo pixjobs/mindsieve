@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import { PaperAirplaneIcon, ClipboardIcon, CheckIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/solid';
+import { PaperAirplaneIcon, ClipboardIcon, CheckIcon, ArrowPathIcon, SparklesIcon } from '@heroicons/react/24/solid';
 import { gsap } from 'gsap';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import SplitType from 'split-type';
 import CardsPanel from '@/components/CardsPanel';
 
 // ----------------- Types -----------------
@@ -23,12 +26,117 @@ interface Message {
   isStreaming?: boolean;
 }
 
-// ----------------- Small UI bits -----------------
+// ----------------- "Fancy" UI Components -----------------
+
+// FINAL VERSION: The dynamic, animated logo component
+const AnimatedLogo = () => {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const emojis = ['🧠', '💡', '❓', '📚', '⚡️'];
+
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    const emojiElements = Array.from(containerRef.current.children);
+    gsap.set(emojiElements, { opacity: 0, scale: 0.8, y: 10 }); // Initial state
+
+    const tl = gsap.timeline({ repeat: -1 });
+
+    emojiElements.forEach((emoji) => {
+      tl.to(emoji, {
+        opacity: 1,
+        scale: 1,
+        y: 0,
+        duration: 0.4,
+        ease: 'power3.inOut',
+      }).to(
+        emoji,
+        {
+          opacity: 0,
+          scale: 0.8,
+          y: -10,
+          duration: 0.4,
+          ease: 'power3.inOut',
+        },
+        '+=1.5' // Hold each emoji for 1.5 seconds
+      );
+    });
+  }, []);
+
+  return (
+    <span ref={containerRef} className="relative inline-block w-10 h-10 mx-2 text-3xl">
+      {emojis.map((emoji, i) => (
+        <span
+          key={i}
+          // PIXEL-PERFECT FIX: Added text-gray-800 to make the emoji visible
+          className="absolute inset-0 flex items-center justify-center text-gray-800 opacity-0 scale-80 transform-gpu"
+        >
+          {emoji}
+        </span>
+      ))}
+    </span>
+  );
+};
+
+const WelcomeAnimation = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const puzzlePieces = "Mindsieve queries Google Gemini for generative answers and simultaneously performs hybrid search on an Elasticsearch vector database of arXiv papers. This provides grounded, accurate, and up-to-date responses for any Computer Science topic.".split(' ');
+
+  useLayoutEffect(() => {
+    const ctx = gsap.context(() => {
+      const title = new SplitType('.split-title', { types: 'chars' });
+      gsap.set(title.chars, { opacity: 0, y: 20 });
+      gsap.set('.welcome-fade-in', { opacity: 0, y: 15 });
+      const tl = gsap.timeline();
+      tl.fromTo('.puzzle-piece',
+        { opacity: 0, scale: 0.8, x: () => gsap.utils.random(-200, 200, 10), y: () => gsap.utils.random(-150, 150, 10), rotation: () => gsap.utils.random(-90, 90) },
+        { opacity: 1, scale: 1, x: 0, y: 0, rotation: 0, duration: 1.2, ease: 'power3.out', stagger: { each: 0.03, from: 'random' } }
+      )
+      .to(title.chars, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', stagger: { each: 0.05, from: 'start' } }, "-=0.5")
+      .to('.welcome-fade-in', { opacity: 1, y: 0, duration: 0.5, stagger: 0.15 }, "-=0.5");
+    }, containerRef);
+    return () => ctx.revert();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="text-center text-[--muted-fg] py-8 px-4 flex flex-col items-center justify-center h-full">
+      <SparklesIcon className="welcome-fade-in w-16 h-16 text-transparent bg-clip-text bg-gradient-to-b from-gray-400 to-gray-700 mb-4" />
+      <h2 className="split-title text-2xl font-serif font-bold text-[--foreground] mb-4">Welcome to Mindsieve</h2>
+      <p className="max-w-xl mb-6 relative h-36">
+        {puzzlePieces.map((word, i) => (
+          <span key={i} className="puzzle-piece inline-block mr-1.5 opacity-0">{word}</span>
+        ))}
+      </p>
+      <div className="welcome-fade-in text-sm text-[--muted-fg]">
+        <p className="font-semibold mb-2">Try asking:</p>
+        <ul className="space-y-1 list-inside">
+          <li>"Explain the transformer architecture"</li>
+          <li>"What are the key optimizations for LLM inference?"</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+const StreamingIndicator = () => {
+  const orbRef = useRef(null);
+  useLayoutEffect(() => {
+    const tl = gsap.timeline({ repeat: -1, yoyo: true });
+    tl.to(orbRef.current, { scale: 1.3, opacity: 0.5, duration: 0.8, ease: 'power1.inOut' });
+    return () => tl.kill();
+  }, []);
+  return (
+    <div className="flex items-center gap-2">
+      <div ref={orbRef} className="w-2 h-2 rounded-full bg-[--color-primary]" />
+      <span className="text-sm text-[--muted-fg]">Generating...</span>
+    </div>
+  );
+};
+
 const SubmitButton = ({ pending }: { pending: boolean }) => (
   <button
     type="submit"
     disabled={pending}
-    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+    className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[--color-primary] text-white disabled:bg-gray-400 disabled:cursor-not-allowed hover:scale-110 active:scale-100 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[--color-primary]"
+    aria-label="Send message"
   >
     {pending ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <PaperAirplaneIcon className="w-5 h-5" />}
   </button>
@@ -37,45 +145,22 @@ const SubmitButton = ({ pending }: { pending: boolean }) => (
 const SourcesDisplay = ({ sources }: { sources: Source[] }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   if (!sources || sources.length === 0) return null;
-  
   return (
-    <div className="mt-4 border-t border-gray-700/50 pt-4">
-      <button 
-        onClick={() => setIsExpanded(!isExpanded)} 
-        className="text-sm font-semibold text-gray-400 mb-2 flex items-center gap-1"
-      >
-        Consulted Sources {isExpanded ? '▼' : '▶'}
+    <div className="mt-5 border-t border-[--glass-border]/30 pt-4">
+      <button onClick={() => setIsExpanded(!isExpanded)} className="text-sm font-semibold text-[--muted-fg] mb-3 flex items-center gap-1.5">
+        Sources {isExpanded ? '▼' : '▶'}
       </button>
       {isExpanded && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {sources.map((source) => (
-            <div 
-              key={source.id} 
-              className="bg-gray-800/80 p-3 rounded-lg text-sm animate-fade-in"
-            >
-              <p className="font-bold text-white">
-                <span className="text-blue-400 mr-2">[{source.id}]</span>
-                <a 
-                  href={source.link} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="hover:underline text-blue-300"
-                >
-                  {source.title}
-                </a>
-              </p>
-              <p 
-                className="text-gray-400 italic mt-1" 
-                dangerouslySetInnerHTML={{ __html: source.snippet }} 
-              />
-              <p className="text-xs text-gray-500 mt-1">Published: {source.published}</p>
+            <div key={source.id} className="text-sm animate-fade-in">
+              <a href={source.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-[--foreground] hover:text-[--color-primary] transition-colors">
+                <span className="text-[--color-primary] mr-2">[{source.id}]</span>
+                {source.title}
+              </a>
+              <p className="text-[--muted-fg] italic mt-1 text-xs pl-6" dangerouslySetInnerHTML={{ __html: source.snippet }} />
               {source.arxiv_id && (
-                <a 
-                  href={`https://arxiv.org/abs/${source.arxiv_id}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="text-xs text-green-400 hover:underline mt-1 inline-block"
-                >
+                <a href={`https://arxiv.org/abs/${source.arxiv_id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[--color-primary] hover:underline mt-1 inline-block pl-6 font-medium">
                   View on arXiv
                 </a>
               )}
@@ -87,97 +172,41 @@ const SourcesDisplay = ({ sources }: { sources: Source[] }) => {
   );
 };
 
-const SaveCardButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className="mt-3 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:bg-gray-600 transition-colors"
-    title="Save as study card"
-  >
-    <PlusIcon className="w-4 h-4" />
-    Save as card
-  </button>
-);
-
-function ChatMessage({
-  message,
-  onSaveCard,
-}: {
-  message: Message;
-  onSaveCard?: (payload: { answer: string; sources: Source[]; topic: string; fromQuery: string }) => void;
-}) {
+function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
   const [hasCopied, setHasCopied] = useState(false);
-  
+
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
     setHasCopied(true);
-    setTimeout(() => setHasCopied(false), 1600);
+    toast.success('Copied to clipboard!');
+    setTimeout(() => setHasCopied(false), 2000);
   };
 
-  // Parse and render markdown content
   const renderContent = (content: string) => {
-    // Check if content is JSON with markdown format
-    if (content.startsWith('{') && content.includes('"format":"markdown"')) {
-      try {
-        const jsonMatch = content.match(/\{.*"format":"markdown".*\}/s);
-        if (jsonMatch) {
-          const json = JSON.parse(jsonMatch[0]);
-          if (json.format === 'markdown') {
-            // Extract markdown content after META delimiter
-            const metaIndex = content.indexOf('|||META|||');
-            if (metaIndex !== -1) {
-              const markdownContent = content.substring(metaIndex + 9).trim();
-              return (
-                <div className="prose prose-invert max-w-none noto-serif-pro">
-                  <div dangerouslySetInnerHTML={{ __html: markdownContent.replace(/\n/g, '<br />') }} />
-                </div>
-              );
-            }
-          }
-        }
-      } catch (e) {
-        // Fall back to regular content rendering
-      }
+    let displayContent = content;
+    if (content.includes('|||META|||')) {
+      displayContent = content.substring(content.indexOf('|||META|||') + 9).trim();
     }
-    
-    // Regular content rendering
+    const sanitizedContent = displayContent.replace(/\[(\d+)\]/g, '**[$1]**');
     return (
-      <p 
-        className="whitespace-pre-wrap noto-serif-pro"
-        dangerouslySetInnerHTML={{ 
-          __html: content.replace(/\[(\d+)\]/g, '<strong class="text-blue-300">[$1]</strong>') 
-        }}
-      />
+      <div className="prose prose-sm md:prose-base max-w-none text-[--foreground] prose-p:leading-relaxed prose-headings:font-serif prose-headings:mb-2 prose-headings:mt-4 prose-a:text-[--color-primary] prose-strong:text-[--foreground]">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizedContent}</ReactMarkdown>
+      </div>
     );
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`group relative p-4 rounded-lg max-w-2xl ${isUser ? 'bg-blue-600' : 'bg-gray-700'}`}>
+    <div className={`animate-fade-in ${isUser ? 'flex justify-end' : ''}`}>
+      <div className={`group relative p-4 rounded-2xl max-w-2xl ${isUser ? 'bg-gray-800 text-gray-50 shadow-lg' : 'glass'}`}>
+        {message.isStreaming && !message.content && <StreamingIndicator />}
         {renderContent(message.content)}
         {!isUser && !message.isStreaming && message.content && (
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 p-1 rounded bg-gray-800/50 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Copy answer"
-          >
-            {hasCopied ? <CheckIcon className="w-4 h-4 text-green-400" /> : <ClipboardIcon className="w-4 h-4" />}
+          <button onClick={handleCopy} className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/5 text-[--muted-fg] opacity-0 group-hover:opacity-100 transition-opacity" title="Copy answer">
+            {hasCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <ClipboardIcon className="w-4 h-4" />}
           </button>
         )}
         {!isUser && <SourcesDisplay sources={message.sources || []} />}
-        {!isUser && !message.isStreaming && onSaveCard && (
-          <SaveCardButton
-            onClick={() =>
-              onSaveCard({
-                answer: message.content,
-                sources: message.sources || [],
-                topic: (message.content.match(/^(.{0,72})/)?.[0] || 'Study Topic').trim(),
-                fromQuery: 'chat',
-              })
-            }
-          />
-        )}
       </div>
     </div>
   );
@@ -186,38 +215,25 @@ function ChatMessage({
 // ----------------- Session bootstrap -----------------
 function useSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  
   useEffect(() => {
     const boot = async () => {
       const stored = localStorage.getItem('ms_session');
       if (stored) {
-        const { sessionId } = JSON.parse(stored);
-        setSessionId(sessionId);
+        setSessionId(JSON.parse(stored).sessionId);
         return;
       }
-      
       try {
         const res = await fetch('/api/sessions', { method: 'POST' });
-        if (!res.ok) {
-          const text = await res.text();
-          console.warn('Failed to init session:', res.status, text);
-          return;
-        }
-        
+        if (!res.ok) throw new Error(await res.text());
         const json = await res.json();
-        localStorage.setItem('ms_session', JSON.stringify({ 
-          sessionId: json.sessionId, 
-          sessionKey: json.sessionKey 
-        }));
+        localStorage.setItem('ms_session', JSON.stringify(json));
         setSessionId(json.sessionId);
       } catch (err) {
         console.error('Session init error:', err);
       }
     };
-    
     boot();
   }, []);
-  
   return sessionId;
 }
 
@@ -232,100 +248,45 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Smooth-scroll on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     if (messages.length > 0) {
-      gsap.from(messagesEndRef.current, { 
-        opacity: 0, 
-        y: 20, 
-        duration: 0.35, 
-        ease: 'power2.out' 
-      });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // Create a turn then stream chat
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!inputRef.current || !sessionId) return;
-
+    if (!inputRef.current?.value.trim() || !sessionId || isSubmitting) return;
     const query = inputRef.current.value.trim();
-    if (!query) return;
-
     formRef.current?.reset();
-
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: query };
-    const assistantId = crypto.randomUUID(); // also used as turnId
+    const assistantId = crypto.randomUUID();
     setCurrentTurnId(assistantId);
-
-    // Create Turn
-    try {
-      const turnRes = await fetch('/api/turns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, userQuery: query, assistantId }),
-      });
-      
-      if (!turnRes.ok) {
-        const t = await turnRes.text();
-        toast.error(`Failed to create turn: ${t}`);
-        return;
-      }
-    } catch (err: any) {
-      toast.error(`Turn error: ${err?.message || 'unknown'}`);
-      return;
-    }
-
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', sources: [], isStreaming: true };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
-
     setIsSubmitting(true);
-    
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, sessionId, turnId: assistantId }),
-      });
-
-      if (!response.ok || !response.body) {
-        const text = await response.text();
-        throw new Error(text || 'Failed to get response');
-      }
-
+      await fetch('/api/turns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, userQuery: query, assistantId }) });
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, sessionId, turnId: assistantId }) });
+      if (!response.ok || !response.body) throw new Error(await response.text() || 'Failed to get response');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-
       let buffer = '';
       let sources: Source[] = [];
       let sourcesReceived = false;
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
-
-        // Extract sources once
         if (!sourcesReceived && buffer.includes('|||SOURCES|||')) {
           const parts = buffer.split('|||SOURCES|||');
-          try {
-            sources = JSON.parse(parts[0]);
-          } catch {
-            sources = [];
-          }
+          try { sources = JSON.parse(parts[0]); } catch { /* ignore */ }
           buffer = parts.slice(1).join('|||SOURCES|||');
           sourcesReceived = true;
         }
-
-        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: buffer, sources } : m)));
+        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: buffer, sources, isStreaming: true } : m)));
       }
-
-      // Mark finished
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, isStreaming: false } : m)));
-
-      // Auto-enqueue a card for the current turn
       if (buffer.trim()) {
         try {
           const res = await fetch('/api/cards/enqueue', {
@@ -340,98 +301,72 @@ export default function ChatPage() {
               fromQuery: query,
             }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || 'Failed to save card');
-          // tell the panel to refresh now
+          if (!res.ok) throw new Error((await res.json())?.error || 'Failed to save card');
           window.dispatchEvent(new CustomEvent('cards:updated'));
         } catch (e: any) {
-          // non-fatal
+          console.warn("Auto-card generation failed:", e.message);
         }
       }
     } catch (error: any) {
       console.error(error);
-      toast.error(`Error: ${error.message || 'Failed to get response'}`);
-      // remove the placeholder assistant message if streaming failed
-      setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+      toast.error(`Error: ${error.message}`);
+      setMessages((prev) => prev.filter((m) => m.id !== assistantId && m.id !== userMsg.id));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Manual save from a specific assistant message
-  const handleSaveCard = async (p: { answer: string; sources: Source[]; topic: string; fromQuery: string }) => {
-    if (!sessionId || !currentTurnId) return;
-    try {
-      const res = await fetch('/api/cards/enqueue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          turnId: currentTurnId,
-          answer: p.answer,
-          sources: p.sources.map((s) => ({ id: s.id, title: s.title, arxiv_id: s.arxiv_id })),
-          topic: p.topic,
-          fromQuery: p.fromQuery,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to save card');
-      window.dispatchEvent(new CustomEvent('cards:updated'));
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to save card');
-    }
-  };
-
   return (
     <>
-      <Toaster 
-        position="top-center" 
-        toastOptions={{ 
-          style: { background: '#333', color: '#fff' },
-          duration: 3000
-        }} 
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: 'rgb(var(--glass) / var(--glass-alpha))',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgb(var(--glass-border) / 0.3)',
+            color: 'var(--foreground)',
+            boxShadow: 'var(--elev-1)',
+          },
+        }}
       />
-
-      <div className="flex flex-col h-screen max-w-7xl mx-auto p-4 font-sans noto-serif-pro">
-        <header className="text-center mb-4 p-4">
-          <h1 className="text-3xl font-bold noto-serif-pro">🧠 Mindsieve AI Tutor</h1>
+      <div className="flex flex-col h-screen">
+        <header className="text-center p-4 flex-shrink-0">
+          <h1 className="text-3xl md:text-4xl font-bold font-serif text-transparent bg-clip-text bg-gradient-to-b from-gray-400 to-gray-800 flex items-center justify-center">
+            <AnimatedLogo />
+            Mindsieve AI Tutor
+          </h1>
         </header>
-
-        <div className="flex gap-4 flex-1">
-          {/* Chat pane */}
-          <main className="flex-grow overflow-y-auto space-y-6 p-4 bg-gray-800/50 rounded-lg border border-gray-700/50">
-            {messages.length === 0 && (
-              <div className="text-center text-gray-400 py-8">
-                <div className="text-lg mb-2 noto-serif-pro">Ask a question to get started...</div>
-                <div className="text-sm text-gray-500 max-w-md mx-auto noto-serif-pro">
-                  Try: "Explain the transformer architecture" or "What are LLM inference optimizations?"
-                </div>
-              </div>
-            )}
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} onSaveCard={handleSaveCard} />
-            ))}
-            <div ref={messagesEndRef} />
+        <div className="flex flex-col md:flex-row gap-4 flex-1 overflow-hidden w-full max-w-7xl mx-auto">
+          <main className="flex-grow flex flex-col overflow-hidden rounded-2xl glass glass-outline">
+            <div className="flex-grow overflow-y-auto space-y-6 p-4 min-h-0">
+              {messages.length === 0 ? (
+                <WelcomeAnimation />
+              ) : (
+                messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
+              )}
+              <div ref={messagesEndRef} className="h-1" />
+            </div>
+            <footer className="p-4 border-t border-[--glass-border]/20 flex-shrink-0">
+              <form ref={formRef} onSubmit={handleSubmit} className="relative">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  name="query"
+                  required
+                  placeholder="Ask about any computing topic, e.g., how virtual memory works"
+                  className="w-full h-14 px-6 pr-16 bg-white/50 border border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-[--color-primary] transition-all shadow-inner"
+                  disabled={!sessionId || isSubmitting}
+                />
+                <SubmitButton pending={isSubmitting} />
+              </form>
+            </footer>
           </main>
-
-          {/* Cards Panel (extracted) */}
-          <CardsPanel sessionId={sessionId} currentTurnId={currentTurnId} />
+          <aside className="w-full md:w-96 h-96 md:h-auto flex-shrink-0 rounded-2xl glass glass-outline overflow-hidden">
+            <CardsPanel sessionId={sessionId} />
+          </aside>
         </div>
-
-        <footer className="mt-4">
-          <form ref={formRef} onSubmit={handleSubmit} className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              name="query"
-              required
-              placeholder="e.g., Explain the transformer architecture"
-              className="w-full p-4 pr-14 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all noto-serif-pro"
-              disabled={!sessionId}
-            />
-            <SubmitButton pending={isSubmitting || !sessionId} />
-          </form>
-        </footer>
       </div>
     </>
   );

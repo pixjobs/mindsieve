@@ -1,17 +1,28 @@
 // tailwind.config.js
+
+const { fontFamily } = require('tailwindcss/defaultTheme');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // In v4 you don't need `content:` — Tailwind's PostCSS plugin handles it.
-  // Keep dark mode driven by the user's OS (you already use prefers-color-scheme).
-  darkMode: ["media"], // switch to 'class' if you add a manual theme toggle
+  // Switched to 'class' to enable manual or default dark mode via a class on the <html> tag.
+  // This aligns with the `className="dark"` set in your optimized layout.tsx.
+  darkMode: 'class',
+
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+
   theme: {
     extend: {
-      // Hook your Next font variables so Tailwind utilities pick them up
+      // Integrated the --font-noto-serif variable for use with the `font-serif` utility class.
       fontFamily: {
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["var(--font-roboto-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ["var(--font-inter)", ...fontFamily.sans],
+        serif: ["var(--font-noto-serif)", ...fontFamily.serif], // Added serif font
+        mono: ["var(--font-roboto-mono)", ...fontFamily.mono],
       },
-      // Optional: map CSS variable colors to Tailwind color tokens for convenience
+      // Your existing color and style extensions are preserved.
       colors: {
         background: "var(--color-background)",
         foreground: "var(--color-foreground)",
@@ -33,5 +44,9 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+
+  // Added the @tailwindcss/typography plugin to style the markdown output from react-markdown.
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 };

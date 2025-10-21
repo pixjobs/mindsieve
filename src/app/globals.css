@@ -1,69 +1,51 @@
-/* Tailwind v4 base imports */
 @import "tailwindcss";
 
 /* ===============================
-   Design Tokens (light defaults)
+   DESIGN TOKENS: TITANIUM (LIGHT THEME)
    =============================== */
 :root {
-  /* Primary hue you can tween with GSAP */
-  --hue: 222;
-
-  /* Surface + text */
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(224 15% 12%);
-
-  /* Brand + accents derived from hue */
-  --primary: hsl(var(--hue) 85% 55%);
+  --hue: 210; /* A cooler, more professional blue for accents */
+  --background: hsl(210 20% 96%); /* A cool, silver-gray base */
+  --foreground: hsl(220 15% 20%); /* A strong, charcoal text color */
+  --primary: hsl(var(--hue) 70% 50%); /* A desaturated accent blue */
   --primary-fg: hsl(0 0% 100%);
-  --secondary: hsl(calc(var(--hue) + 30) 90% 62%);
-  --muted: hsl(220 14% 96%);
-  --muted-fg: hsl(222 9% 40%);
-
-  /* Code + emphasis */
-  --code-bg: hsl(222 16% 96%);
-  --code-fg: hsl(222 40% 22%);
+  --muted: hsl(210 20% 92%);
+  --muted-fg: hsl(220 10% 40%);
+  --code-bg: hsl(210 20% 93%);
+  --code-fg: hsl(210 30% 25%);
   --success: hsl(160 84% 39%);
   --warning: hsl(45 100% 51%);
   --danger:  hsl(0 84% 60%);
 
-  /* Glass + depth */
-  --glass: 255 255 255;              /* base RGB for glass surfaces */
-  --glass-alpha: 0.6;                /* tween this with GSAP for “liquid” feel */
-  --glass-blur: 16px;                /* backdrop blur radius */
-  --glass-border: 8, 8, 12;          /* rgb triplet for border (r,g,b) */
-  --elev-1: 0 10px 30px -12px rgb(0 0 0 / 0.18);
-  --elev-2: 0 18px 50px -20px rgb(0 0 0 / 0.25);
+  /* Frosted Metal & Crisp Shadows */
+  --glass: 245, 246, 248; /* Off-white/silver base for panels */
+  --glass-alpha: 0.7; /* More opaque, less "glassy" */
+  --glass-blur: 12px;
+  --glass-border: 180, 185, 190;
+  --elev-1: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+  --elev-2: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
 
-  /* Subtle animated background */
-  --bg-dot: radial-gradient(circle at 1px 1px, hsl(220 14% 92%) 1px, transparent 0);
-  --bg-grad:
-    radial-gradient(1200px 800px at 10% 10%, hsl(var(--hue) 90% 96% / 0.7), transparent 60%),
-    radial-gradient(1000px 700px at 90% 20%, hsl(calc(var(--hue) + 60) 95% 95% / 0.6), transparent 65%);
+  /* Subtle "Brushed Metal" Background Gradient */
+  --bg-grad: linear-gradient(to bottom, hsl(210 15% 98%), hsl(210 15% 92%));
 }
 
 /* =================================
-   Dark scheme overrides (auto)
+   DARK THEME (Charcoal/Slate)
    ================================= */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: hsl(224 16% 9%);
-    --foreground: hsl(210 20% 98%);
-    --muted: hsl(220 14% 14%);
-    --muted-fg: hsl(220 10% 70%);
-    --code-bg: hsl(222 16% 14%);
-    --code-fg: hsl(210 15% 90%);
-    --glass: 15 17 22;
-    --glass-alpha: 0.45;
-    --bg-dot: radial-gradient(circle at 1px 1px, hsl(220 14% 22%) 1px, transparent 0);
-    --bg-grad:
-      radial-gradient(1200px 800px at 10% 10%, hsl(var(--hue) 52% 16% / 0.55), transparent 60%),
-      radial-gradient(1000px 700px at 90% 20%, hsl(calc(var(--hue) + 60) 54% 18% / 0.55), transparent 65%);
-  }
+.dark :root {
+  --background: hsl(220 15% 12%);
+  --foreground: hsl(210 20% 95%);
+  --muted: hsl(220 15% 18%);
+  --muted-fg: hsl(220 10% 65%);
+  --code-bg: hsl(220 15% 16%);
+  --code-fg: hsl(210 15% 85%);
+  --glass: 30, 33, 40;
+  --glass-alpha: 0.5;
+  --bg-grad: linear-gradient(to bottom, hsl(220 15% 15%), hsl(220 15% 10%));
 }
 
 /* ===============================
-   Tailwind v4 theme bridge
-   (maps CSS vars to Tailwind tokens)
+   TAILWIND THEME BRIDGE
    =============================== */
 @theme inline {
   --color-background: var(--background);
@@ -75,169 +57,124 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
-
-  /* Use your Next fonts from layout.tsx */
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-noto-serif);
   --font-mono: var(--font-roboto-mono);
 }
 
 /* ===============================
-   Base document styles
+   BASE & TYPOGRAPHY
    =============================== */
-*,
-*::before,
-*::after { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 
-html, body, #__next { height: 100%; }
+html {
+  font-size: 17.5px;
+  scroll-behavior: smooth;
+}
+html, body {
+  min-height: 100vh;
+}
 
 body {
   margin: 0;
+  padding: 0.5rem;
   color: var(--foreground);
-  background:
-    var(--bg-grad),
-    var(--bg-dot),
-    var(--background);
-  background-size:
-    100% 100%,
-    18px 18px,
-    cover;
-  font-family: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  background: var(--bg-grad), var(--background);
+  background-attachment: fixed;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition:
-    background-color 300ms ease,
-    color 300ms ease,
-    --hue 300ms ease,
-    --glass-alpha 200ms ease,
-    --glass-blur 200ms ease;
 }
 
-/* Text selection aligned to brand hue */
+@media (min-width: 640px) {
+  body {
+    padding: 1rem;
+  }
+}
+
 ::selection {
   background: hsl(var(--hue) 100% 50% / 0.25);
   color: inherit;
 }
 
+a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: text-decoration-color 200ms ease, color 200ms ease;
+}
+a:hover { text-decoration: underline; }
+
+/* Refined Typographic Scale */
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+h1, h2 {
+  margin-block: 2.5rem 1.25rem;
+}
+h1 { font-size: 3rem; font-weight: 700; }
+h2 { font-size: 2rem; font-weight: 600; }
+
+/* PIXEL-PERFECT FIX: A more compact h3 for UI elements */
+h3 {
+  font-size: 1.25rem; /* Reduced size for UI headings */
+  font-weight: 600;
+  margin-block: 2rem 1rem; /* Reduced vertical margins */
+}
+
+p { margin-block: 0 1.5rem; }
+
 /* ===============================
-   Custom utilities (Tailwind v4)
+   CUSTOM UTILITIES: TITANIUM
    =============================== */
 @layer utilities {
   .glass {
     background: rgb(var(--glass) / var(--glass-alpha));
-    backdrop-filter: blur(var(--glass-blur)) saturate(120%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(110%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(110%);
     box-shadow: var(--elev-1);
-    border: 1px solid rgb(var(--glass-border) / 0.25);
-    border-radius: 16px;
+    border: 1px solid rgb(var(--glass-border) / 0.3);
+    border-radius: 20px;
   }
 
-  .glass-strong {
-    background: rgb(var(--glass) / calc(var(--glass-alpha) + 0.15));
-    backdrop-filter: blur(calc(var(--glass-blur) + 4px)) saturate(130%);
-    -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 4px)) saturate(130%);
-    box-shadow: var(--elev-2);
+  .glass-outline {
+    position: relative;
   }
-
-  .glass-outline { position: relative; }
   .glass-outline::after {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: 16px;
+    border-radius: 20px;
     pointer-events: none;
-    background:
-      linear-gradient(to bottom right,
-        hsl(var(--hue) 90% 65% / 0.25),
-        transparent 30%,
-        hsl(calc(var(--hue) + 30) 90% 60% / 0.25)
-      );
-    mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
-    -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
-    padding: 1px;  /* “hairline” glow */
-    border: 1px solid rgb(var(--glass-border) / 0.3);
-    mix-blend-mode: screen;
-    opacity: 0.8;
+    background: linear-gradient(to bottom right, hsl(210 15% 100% / 0.5), transparent 50%);
+    padding: 1px;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
   }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    height: 2.75rem;
-    padding-inline: 1rem;
-    border-radius: 12px;
-    border: 1px solid rgb(var(--glass-border) / 0.35);
-    background: linear-gradient(
-      to bottom right,
-      hsl(var(--hue) 90% 62% / 0.95),
-      hsl(calc(var(--hue) - 6) 88% 55% / 0.95)
-    );
-    color: var(--primary-fg);
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    box-shadow: var(--elev-1);
-    transition: transform 120ms ease, box-shadow 200ms ease, opacity 120ms ease;
-  }
-  .btn:hover { transform: translateY(-1px); box-shadow: var(--elev-2); }
-  .btn:active { transform: translateY(0); opacity: 0.9; }
-
-  /* Card = spacing helper; combine with .glass in markup */
-  .card { @apply p-6 md:p-8; }
-
-  /* Small helper for section headers on glass cards */
-  .section-heading { @apply text-sm uppercase tracking-wider text-[--color-muted-foreground]; }
 }
 
 /* ===============================
-   Code-friendly defaults
+   CODE STYLES
    =============================== */
-pre, code, kbd, samp {
-  font-family: var(--font-roboto-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+pre, code {
+  font-family: var(--font-roboto-mono), ui-monospace, monospace;
 }
 pre {
   background: var(--code-bg);
   color: var(--code-fg);
-  border-radius: 14px;
-  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
   overflow: auto;
-  border: 1px solid rgb(var(--glass-border) / 0.25);
+  border: 1px solid rgb(var(--glass-border) / 0.5);
 }
 code {
-  background: color-mix(in oklab, var(--code-bg) 85%, transparent);
-  padding: 0.15rem 0.35rem;
-  border-radius: 8px;
-  border: 1px solid rgb(var(--glass-border) / 0.2);
+  background: var(--code-bg);
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--glass-border) / 0.4);
 }
-
-/* ===============================
-   Liquid background host
-   =============================== */
-.liquid-bg {
-  position: relative;
-  isolation: isolate; /* so backdrop filters don’t leak */
-}
-.liquid-bg::before {
-  content: "";
-  position: absolute;
-  inset: -20% -10%;
-  z-index: -1;
-  filter: blur(50px);
-  opacity: 0.6;
-  background:
-    radial-gradient(35% 40% at 20% 20%, hsl(var(--hue) 90% 60% / 0.35), transparent),
-    radial-gradient(40% 45% at 80% 30%, hsl(calc(var(--hue)+40) 90% 58% / 0.30), transparent),
-    radial-gradient(35% 40% at 50% 80%, hsl(calc(var(--hue)-40) 90% 55% / 0.30), transparent);
-  transition: opacity 300ms ease;
-}
-
-/* ===============================
-   Links & headings
-   =============================== */
-a { color: var(--primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-h1, h2, h3 { letter-spacing: -0.01em; }
-h1 { font-weight: 800; }
-h2 { font-weight: 700; }
-h3 { font-weight: 600; }
