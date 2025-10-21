@@ -1,52 +1,72 @@
-# Docker-related files
-Dockerfile
-.dockerignore
+# ===================================================================
+#  Production-Ready .dockerignore for Next.js
+#  Purpose: Creates a minimal build context for smaller, faster,
+#           and more secure Docker images.
+# ===================================================================
 
-# Git version control
+# 1. Version Control
+# Exclude the entire Git history and local Git configuration.
 .git
 .gitignore
 
-# Project dependencies
-# These are installed during the build process inside the container
+# 2. Docker & CI/CD
+# The Docker build process doesn't need these files inside the context.
+Dockerfile
+.dockerignore
+.github/
+.gitlab-ci.yml
+
+# 3. Dependencies
+# CRITICAL: Dependencies should be installed fresh inside the container
+# based on the lock file. Never copy the host's node_modules.
 node_modules
+npm-debug.log*
+yarn-error.log
 
-# Next.js build output
-# This directory is generated inside the container during the build
+# 4. Next.js Build Artifacts
+# The Docker build will create its own .next directory inside the
+# container. Copying the host's version can cause issues.
 .next
+out
 
-# Optional: Source maps
-*.map
-
-# Local environment variables
-# These should be passed in during runtime, not built into the image
+# 5. Secrets & Local Environment
+# CRITICAL (Security): Never build secrets into your image.
+# Inject them at runtime using Cloud Run secrets or environment variables.
 .env
 .env.local
 .env.development
 .env.production
 .env.test
+.env.*.local
 
-# Test files
-coverage
-*.test.js
-*.test.jsx
-*.test.ts
-*.test.tsx
+# 6. Testing
+# All test-related files and reports are for development only.
+coverage/
 jest.config.js
 jest.setup.js
 playwright.config.ts
 playwright-report/
 test-results/
+cypress/
+*.test.*
+*.spec.*
 
-
-# Documentation and configuration
+# 7. Documentation & Linting
+# These are not needed for the production build or runtime.
 README.md
+CONTRIBUTING.md
 .eslintrc.json
 .prettierrc
-tsconfig.json
-next-env.d.ts
+.prettierignore
 
-# Editor and OS-specific files
-.vscode
-.idea
+# 8. Editor & OS-specific Files
+# These are local development environment files.
+.vscode/
+.idea/
 .DS_Store
 *.swp
+
+# 9. TypeScript Cache & Source Maps
+# The build process will generate what it needs.
+*.tsbuildinfo
+*.map
