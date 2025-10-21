@@ -178,3 +178,7 @@ code {
   border-radius: 6px;
   border: 1px solid rgb(var(--glass-border) / 0.4);
 }
+
+p > strong {
+  display: block;
+}
