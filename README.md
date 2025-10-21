@@ -1,4 +1,4 @@
-# 🧠 MindSieve --- AI Tutor & Research Assistant
+  # 🧠 MindSieve --- AI Tutor & Research Assistant
 
 **Submission for the [AI Accelerate Hackathon (Elastic
 Challenge)](https://aiinaction.devpost.com)**\
@@ -52,13 +52,14 @@ flowchart LR
   api_chat --> es["ElasticSearch (BM25 + KNN)"]
   es -->|"top‑k documents"| gemini["Vertex AI Gemini 2.5 Pro"]
   gemini -->|"streamed answer + citations"| ui
+
   subgraph GCP [Google Cloud Platform]
-    es
-    gemini
     cr[Cloud Run (App)]
     sm[Secret Manager]
+    es
+    gemini
+    sm --> cr
   end
-  sm --> cr
 ```
 
 ### Retrieval Pipeline
