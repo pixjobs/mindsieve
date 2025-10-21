@@ -6,17 +6,15 @@ import { Client as ElasticsearchClient } from '@elastic/elasticsearch';
 import { GoogleAuth } from 'google-auth-library';
 import * as config from '@/config';
 import { requireSession } from '@/server/auth/context';
+import { enhanceQuery } from '@/server/chat/enhancer';
 
-// Answer length controls
-const MAX_TOKENS_ANSWER =
-  Number(process.env.CHAT_MAX_TOKENS || 1200); // was 512
-const STREAM_CHAR_CAP =
-  Number(process.env.CHAT_CHAR_CAP || 12000);  // was 7000
+/** ── Answer length / stream caps ───────────────────────── */
+const STREAM_CHAR_CAP   = Number(process.env.CHAT_CHAR_CAP || 9000);     // keep UI snappy
 
-/** ── Small logging helpers ─────────────────────────────── */
+/** ── Logging helpers ───────────────────────────────────── */
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-const ts = () => new Date().toISOString();
-const j = (o: any) => JSON.stringify(o);
+const ts  = () => new Date().toISOString();
+const j   = (o: any) => JSON.stringify(o);
 function logStart(step: string, reqId: string, extra: Record<string, unknown> = {}) { console.info(j({ ts: ts(), level: 'INFO', reqId, event: 'STEP_START', step, ...extra })); }
 function logEnd(step: string, reqId: string, ms: number, extra: Record<string, unknown> = {}) { console.info(j({ ts: ts(), level: 'INFO', reqId, event: 'STEP_END', step, duration_ms: ms, ...extra })); }
 function logInfo(msg: string, reqId: string, extra: Record<string, unknown> = {}) { console.info(j({ ts: ts(), level: 'INFO', reqId, msg, ...extra })); }
@@ -24,7 +22,10 @@ function logWarn(msg: string, reqId: string, extra: Record<string, unknown> = {}
 function logError(msg: string, reqId: string, error?: unknown, extra: Record<string, unknown> = {}) { console.error(j({ ts: ts(), level: 'ERROR', reqId, msg, error: serializeError(error), ...extra })); }
 function serializeError(e: unknown) {
   if (!e) return null;
-  if (e instanceof Error) { const anyErr = e as any; return { name: e.name, message: e.message, stack: e.stack, code: anyErr.code, status: anyErr.status, details: anyErr.details, reason: anyErr.reason }; }
+  if (e instanceof Error) {
+    const anyErr = e as any;
+    return { name: e.name, message: e.message, stack: e.stack, code: anyErr.code, status: anyErr.status, details: anyErr.details, reason: anyErr.reason };
+  }
   return e;
 }
 async function timed<T>(step: string, reqId: string, fn: () => Promise<T>): Promise<T> {
@@ -82,88 +83,6 @@ async function initializeClients(reqId: string) {
   return clients!;
 }
 
-/** ── Enhancer (fast, cached, guardrailed) ──────────────── */
-const QUERY_ENHANCER_PROMPT = `
-You are an expert research assistant. Convert the user's brief query into:
-(1) a short, dense "hypothetical_answer" useful for semantic embedding and
-(2) a concise "keywords" array (core technical terms).
-
-Rules:
-- Output ONLY valid JSON (no markdown, no commentary).
-- Keep "hypothetical_answer" compact, factual, and self-contained (<= 700 chars).
-- Do NOT cite or reference documents.
-- "keywords" must be 3-10 short strings, no punctuation beyond hyphens or slashes.
-
-User Query:
-{query}
-
-JSON schema:
-{
-  "hypothetical_answer": "string",
-  "keywords": ["string", "string", "..."]
-}
-`.trim();
-
-type CacheEntry = { value: string; expiresAt: number };
-const ENHANCER_CACHE = new Map<string, CacheEntry>();
-const ENHANCER_TTL_MS = 2 * 60 * 1000;
-const ENHANCER_TIMEOUT_MS = 1800;
-const ENHANCER_MAX_OUTPUT = 1000;
-
-function normKey(s: string) { return s.toLowerCase().replace(/\s+/g, ' ').trim(); }
-function shouldSkipEnhancer(q: string) {
-  if (!q) return true;
-  const len = q.length;
-  const commaCount = (q.match(/,/g) || []).length;
-  const hasCodeish = /```|function\s|\bclass\b|\{|\}|\<\w+\>/.test(q);
-  const manySentences = (q.match(/[.!?]\s/g) || []).length >= 3;
-  return len > 320 || manySentences || hasCodeish || commaCount > 6;
-}
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('enhancer_timeout')), ms);
-    p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
-  });
-}
-
-async function strengthenQuery(query: string, generativeModel: any, reqId: string): Promise<string> {
-  return timed('vertex_ai.enhance_query', reqId, async () => {
-    const base = query?.trim() || '';
-    if (!base || shouldSkipEnhancer(base)) { if (!base) return base; logInfo('Enhancer skipped by heuristic', reqId); return base; }
-
-    const key = normKey(base);
-    const hit = ENHANCER_CACHE.get(key);
-    if (hit && hit.expiresAt > Date.now()) { logInfo('Enhancer cache hit', reqId); return hit.value; }
-
-    const prompt = QUERY_ENHANCER_PROMPT.replace('{query}', base);
-    try {
-      const result = await withTimeout(
-        generativeModel.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
-        ENHANCER_TIMEOUT_MS
-      );
-      const raw = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw || typeof raw !== 'string') { logWarn('Enhancer empty response; using original', reqId); return base; }
-
-      let hypo = base;
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed?.hypothetical_answer === 'string') hypo = parsed.hypothetical_answer;
-      } catch { logWarn('Enhancer returned non-JSON; using original', reqId, { sample: raw.slice(0, 120) }); return base; }
-
-      hypo = hypo.replace(/\s+/g, ' ').trim();
-      if (!hypo) return base;
-      if (hypo.length > ENHANCER_MAX_OUTPUT) hypo = hypo.slice(0, ENHANCER_MAX_OUTPUT);
-
-      ENHANCER_CACHE.set(key, { value: hypo, expiresAt: Date.now() + ENHANCER_TTL_MS });
-      return hypo;
-    } catch (error) {
-      const kind = (error as Error)?.message || 'enhancer_error';
-      logWarn('AI query enhancement failed; using original', reqId, { kind });
-      return base;
-    }
-  });
-}
-
 /** ── Embeddings (robust REST with regional fallback) ───── */
 async function getEmbeddingModel(_: VertexAI, reqId: string) {
   logWarn('Embedding SDK unavailable; will use REST endpoints', reqId);
@@ -196,8 +115,7 @@ async function embedViaRestRobust(text: string, reqId: string) {
           const values: number[] = d?.embedding?.values || d?.predictions?.[0]?.embedding?.values || d?.predictions?.[0]?.embeddings?.values;
           if (Array.isArray(values) && values.length) { logInfo('Embeddings OK via :embedText', reqId, { region, dims: values.length }); return { embedding: { values } }; }
         } else {
-          const body = await r1.text().catch(() => '');
-          logWarn('embedText failed; will try :predict or next region', reqId, { via: ':embedText', region, status: r1.status, body });
+          const body = await r1.text().catch(() => ''); logWarn('embedText failed; will try :predict or next region', reqId, { via: ':embedText', region, status: r1.status, body });
         }
       } catch (e) { logWarn('embedText threw; will try :predict or next region', reqId, { via: ':embedText', region, err: serializeError(e) }); }
 
@@ -210,8 +128,7 @@ async function embedViaRestRobust(text: string, reqId: string) {
           const values: number[] = d?.predictions?.[0]?.embedding?.values || d?.predictions?.[0]?.embeddings?.values;
           if (Array.isArray(values) && values.length) { logInfo('Embeddings OK via :predict', reqId, { region, dims: values.length }); return { embedding: { values } }; }
         } else {
-          const body = await r2.text().catch(() => '');
-          logWarn('predict failed; trying next region', reqId, { via: ':predict', region, status: r2.status, body });
+          const body = await r2.text().catch(() => ''); logWarn('predict failed; trying next region', reqId, { via: ':predict', region, status: r2.status, body });
         }
       } catch (e) { logWarn('predict threw; trying next region', reqId, { via: ':predict', region, err: serializeError(e) }); }
     }
@@ -235,27 +152,59 @@ async function getEmbedding(text: string, embeddingModel: any, reqId: string): P
   });
 }
 
-/** ── Prompting (Markdown + Links) ──────────────────────── */
+/** ── Tutor prompt (short, structured, follow-ups) ───────── */
 function buildFinalPrompt(query: string, groundingJson: string): string {
-  return `You are an expert Computer Science tutor. Write a **Markdown** answer that uses the provided SOURCES JSON (snippets from arXiv papers).
+  return `You are a friendly **Computer Science tutor**. Write a concise **Markdown** answer that uses the SOURCES JSON (snippets from arXiv papers). 
+Start immediately with the “### Introduction” heading. Do not add greetings, prefaces, or meta commentary.
 
-**Formatting rules**
-- Use these sections in order:
-  ## TL;DR
-  ## Explanation
-  ## Pros & Cons
-  ## Practical tips
-  ## Sources
-- Cite sources inline as [N] wherever you use them.
-- In ## Sources, list each used source on a new line as: [N] Title (no links; links will be added by the system).
-- If sources are insufficient for part of the answer, prefix that part with **"General Knowledge:"**.
-- Keep paragraphs short (≤ 4 sentences), lists concise, and avoid raw HTML.
+**Style & constraints**
+- Keep it succinct overall (~6–10 sentences across core sections).
+- Be beginner-first, then add clearly labeled expert notes.
+- Cite sources inline as [N] whenever used.
+- Use Markdown only (no raw HTML).
+- If sources are insufficient for part of the answer, prefix that part with **General Knowledge:** and continue.
+
+**Sections (in order, exact headings)**
+
+### Introduction
+1–2 sentence plain-language overview that orients a beginner to the idea and why it matters.
+
+### Core idea
+Up to 3 sentences explaining the concept in simple terms (analogies allowed). Add inline citations like [1], [2] when used.
+
+### Expert notes
+1–3 short bullets for advanced readers (edge cases, variants, algorithms). Cite where used.
+
+### Quick check
+Two short self-test questions (no answers), each on one line.
+
+### Suggested follow-ups
+4–6 bullet topics a learner could explore next (from basics → advanced).
 
 SOURCES (JSON):
 ${groundingJson}
 
 QUESTION:
 ${query}`;
+}
+
+
+/** ── Follow-ups from enhancer keywords (for UI chips) ──── */
+function followupsFromKeywords(keywords: string[] = []): string[] {
+  const base = (keywords || []).map(k => String(k).trim()).filter(Boolean).slice(0, 6);
+  const buckets = [
+    (t: string) => `Foundations of ${t}`,
+    (t: string) => `${t}: worked example`,
+    (t: string) => `${t} vs alternatives`,
+    (t: string) => `Common pitfalls in ${t}`,
+    (t: string) => `When (not) to use ${t}`,
+    (t: string) => `Advanced ${t}: optimization/scale`,
+  ];
+  const out: string[] = [];
+  for (let i = 0; i < base.length; i++) {
+    out.push(buckets[i % buckets.length](base[i]));
+  }
+  return out.slice(0, 6);
 }
 
 /** ── HTTP handler (POST) ───────────────────────────────── */
@@ -300,13 +249,17 @@ export async function POST(req: Request) {
       getEmbeddingModel(vertexAI, reqId)
     );
 
-    // 3) Enhance query
-    const enhancedQuery = await strengthenQuery(query, generativeModel, reqId);
+    // 3) Enhance (guarded helper)
+    const enhance = await enhanceQuery(query, generativeModel);
+    if ('blocked' in enhance && enhance.blocked) {
+      return NextResponse.json({ error: 'blocked', reason: enhance.reason, reqId }, { status: 400 });
+    }
+    const enhancedQuery = enhance.hypothetical;
 
     // 4) Embedding
     const queryVector = await getEmbedding(enhancedQuery, embeddingModel, reqId);
 
-    // 5) Hybrid search
+    // 5) Hybrid search (text + vector + RRF)
     const searchResponse = await timed('elasticsearch.search', reqId, async () =>
       esClient.search({
         index: config.ES_INDEX,
@@ -329,8 +282,8 @@ export async function POST(req: Request) {
     let hits: any[] = (searchResponse as any)?.hits?.hits ?? [];
     logInfo('Search results', reqId, { totalHits: hits.length });
 
-    // 5b) Light topic filter to reduce off-domain bleed
-    const topicRe = /(ethernet|fiber|copper|network|cabling|lan|protocol|arxiv|transformer|neural|graph|optimization|vision|nlp|retrieval)/i;
+    // 5b) Light domain filter (reduce off-topic bleed)
+    const topicRe = /(arxiv|transformer|neural|attention|graph|retrieval|optimization|vision|nlp|compiler|algorithm|complexity|systems|database|query|index|network|protocol)/i;
     const filtered = hits.filter(h => {
       const s = h._source || {};
       return topicRe.test(s?.title || '') || topicRe.test(s?.abstract || s?.summary || '');
@@ -340,7 +293,12 @@ export async function POST(req: Request) {
     if (hits.length === 0) {
       const answer = "I couldn't find any specific documents in my arXiv knowledge base for your query. Please try rephrasing.";
       const sourcesJson = JSON.stringify([]);
-      const metaJson = JSON.stringify({ format: 'markdown', links: [], anim: { enter: 'stagger-fade' } });
+      const metaJson = JSON.stringify({
+        format: 'markdown',
+        links: [],
+        followups: followupsFromKeywords((enhance as any).keywords || []),
+        anim: { enter: 'stagger-fade' },
+      });
       return new Response(sourcesJson + '|||SOURCES|||' + metaJson + '|||META|||' + answer, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
@@ -354,7 +312,7 @@ export async function POST(req: Request) {
 
     // 6) Format sources & prompt
     const MAX_SNIPPETS = Math.max(3, Math.min(config.MAX_SNIPPETS || 6, 10));
-    const MAX_CHARS = Math.max(280, Math.min(config.MAX_CHARS_PER_SNIPPET || 600, 1200));
+    const MAX_CHARS    = Math.max(280, Math.min(config.MAX_CHARS_PER_SNIPPET || 600, 1200));
 
     const topDocs = hits.slice(0, MAX_SNIPPETS);
     const sourceItems = topDocs.map((hit: any, i: number) => {
@@ -378,7 +336,7 @@ export async function POST(req: Request) {
     });
     const finalPrompt = buildFinalPrompt(query, groundingJson);
 
-    // 7) Stream answer (attempt with Google Search grounding; fallback without tools)
+    // 7) Stream answer (try Google Search grounding; fallback without tools)
     const streamResult = await timed('vertex_ai.generate_stream', reqId, async () => {
       const baseReq: any = {
         contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
@@ -386,7 +344,7 @@ export async function POST(req: Request) {
           temperature: 0.2,
           topP: 0.9,
           responseMimeType: 'text/plain',
-          maxOutputTokens: MAX_TOKENS_ANSWER, // ↑ bumped + configurable
+          maxOutputTokens: Math.min(1600, Number(process.env.CHAT_MAX_TOKENS || 1600)),
         },
       };
       try {
@@ -402,11 +360,12 @@ export async function POST(req: Request) {
       }
     });
 
-    // 8) META channel (for GSAP / links chips)
+    // 8) META channel (for GSAP / links / follow-ups chips)
     const meta = {
       format: 'markdown',
       links: sourceItems.map(s => ({ id: s.id, title: s.title, href: s.link })),
-      anim: { enter: 'stagger-fade' }, // free to expand in UI (duration, ease, staggerEach)
+      followups: followupsFromKeywords((enhance as any).keywords || []),
+      anim: { enter: 'stagger-fade' },
     };
 
     let emitted = 0;
@@ -414,7 +373,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         const enc = new TextEncoder();
-        // Sources + META upfront
+        // Emit SOURCES + META first so UI can render chips/cards immediately
         controller.enqueue(enc.encode(JSON.stringify(sourceItems) + '|||SOURCES|||'));
         controller.enqueue(enc.encode(JSON.stringify(meta) + '|||META|||'));
 
