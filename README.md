@@ -3,7 +3,7 @@
 **Submission for the [AI Accelerate Hackathon (Elastic
 Challenge)](https://aiinaction.devpost.com)**\
 **Stack:** Next.js · Elastic (BM25 + vector hybrid) · Vertex AI (Gemini
-2.5 Pro + `text-embedding-005`) · Cloud Run · Tailwind · shadcn/ui ·
+2.5 Flash/Pro + `text-embedding-005`) · Cloud Run · Tailwind · shadcn/ui ·
 GSAP\
 **Region:** Google Cloud --- `europe-west1`
 
@@ -34,7 +34,7 @@ GSAP\
 -   MindSieve combines **semantic search (vectors)** and **keyword
     relevance (BM25)** for deep, context‑aware retrieval.\
 -   Gemini then produces **concise, source‑cited explanations** in a
-    **tutor‑friendly Markdown format**, balancing accessibility and
+    **tutor‑friendly Markdown format**, balancing accessibility and 
     academic rigor.
 -   In the background, Gemini also produces a short 'Study-card' that
     is displayed as a summary on the right hand side
@@ -52,7 +52,7 @@ flowchart LR
   U[User] --> UI[Next.js App]
   UI -->|query| API[API /api/chat]
   API --> ES[Elasticsearch]
-  ES -->|top-k docs| GEM[Gemini 2.5 Pro]
+  ES -->|top-k docs| GEM[Gemini 2.5 Flash/Pro]
   GEM -->|stream + cites| UI
 
   subgraph GCP
@@ -108,7 +108,7 @@ papers\
   **Backend API**     Node 18 + Cloud Run
   **Search Engine**   Elasticsearch (BM25 + `vector` + RRF fusion)
   **Embeddings**      Vertex AI `text-embedding-005` (768‑dim)
-  **LLM**             Vertex AI Gemini 2.5 Pro
+  **LLM**             Vertex AI Gemini 2.5 Flash/Pro
   **Data Source**     arXiv Computer Science corpus (700k+ docs)
   **Orchestration**   Cloud Run + Cloud Scheduler for ingestion
 

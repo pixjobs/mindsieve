@@ -36,7 +36,7 @@ export const GENERATIVE_MODEL_NAME =
 
 // Distiller model for study cards (fast)
 export const CARD_MODEL_NAME =
-  process.env.CARD_MODEL_NAME || 'gemini-2.5-flash-lite';
+  process.env.CARD_MODEL_NAME || 'gemini-2.5-flash';
 
 // -----------------------------
 // Secret Manager (names, not values)
