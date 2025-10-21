@@ -1,4 +1,4 @@
-# 🧠 MindSieve --- AI Tutor & Research Assistant
+  # 🧠 MindSieve --- AI Tutor & Research Assistant
 
 **Submission for the [AI Accelerate Hackathon (Elastic
 Challenge)](https://aiinaction.devpost.com)**\
@@ -35,7 +35,9 @@ GSAP\
     relevance (BM25)** for deep, context‑aware retrieval.\
 -   Gemini then produces **concise, source‑cited explanations** in a
     **tutor‑friendly Markdown format**, balancing accessibility and
-    academic rigor.\
+    academic rigor.
+-   In the background, Gemini also produces a short 'Study-card' that
+    is displayed as a summary on the right hand side
 -   The interface emphasizes **clarity and curiosity**, not chat‑bot
     verbosity.
 
@@ -47,18 +49,22 @@ GSAP\
 
 ``` mermaid
 flowchart LR
-  user([Learner / Researcher]) --> ui["Next.js App"]
-  ui -->|query| api_chat["API /api/chat"]
-  api_chat --> es["ElasticSearch (BM25 + KNN)"]
-  es -->|"top‑k documents"| gemini["Vertex AI Gemini 2.5 Pro"]
-  gemini -->|"streamed answer + citations"| ui
-  subgraph GCP [Google Cloud Platform]
-    es
-    gemini
-    cr[Cloud Run (App)]
-    sm[Secret Manager]
+  U[User] --> UI[Next.js App]
+  UI -->|query| API[API /api/chat]
+  API --> ES[Elasticsearch]
+  ES -->|top-k docs| GEM[Gemini 2.5 Pro]
+  GEM -->|stream + cites| UI
+
+  subgraph GCP
+    CR[Cloud Run]
+    SM[Secret Manager]
+    ES
+    GEM
   end
-  sm --> cr
+
+  SM --> CR
+
+
 ```
 
 ### Retrieval Pipeline
