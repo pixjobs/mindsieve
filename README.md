@@ -47,20 +47,21 @@ GSAP\
 
 ``` mermaid
 flowchart LR
-    user([Learner / Researcher]) --> ui["Next.js App"]
-    ui -->|query| api_chat["API /api/chat"]
-    api_chat --> es["ElasticSearch (BM25 + KNN)"]
-    es -->|"top-k documents"| gemini["Vertex AI Gemini 2.5 Pro"]
-    gemini -->|"streamed answer + citations"| ui
+  user([Learner / Researcher]) --> ui["Next.js App"]
+  ui -->|query| api_chat["API /api/chat"]
+  api_chat --> es["ElasticSearch (BM25 + KNN)"]
+  es -->|top-k documents| gemini["Vertex AI Gemini 2.5 Pro"]
+  gemini -->|streamed answer + citations| ui
 
-    subgraph GCP [Google Cloud Platform]
-        cr[Cloud Run (App)]
-        sm[Secret Manager]
-        es
-        gemini
-    end
+  subgraph GCP [Google Cloud Platform]
+    cr[Cloud Run (App)]
+    sm[Secret Manager]
+    es
+    gemini
+  end
 
-    sm --> cr
+  sm --> cr
+
 ```
 
 ### Retrieval Pipeline
