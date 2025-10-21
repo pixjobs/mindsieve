@@ -35,7 +35,9 @@ GSAP\
     relevance (BM25)** for deep, context‑aware retrieval.\
 -   Gemini then produces **concise, source‑cited explanations** in a
     **tutor‑friendly Markdown format**, balancing accessibility and
-    academic rigor.\
+    academic rigor.
+-   In the background, Gemini also produces a short 'Study-card' that
+    is displayed as a summary on the right hand side
 -   The interface emphasizes **clarity and curiosity**, not chat‑bot
     verbosity.
 
