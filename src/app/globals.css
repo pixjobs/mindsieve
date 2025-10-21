@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/* ===============================
+   DESIGN TOKENS: TITANIUM (LIGHT THEME)
+   =============================== */
+:root {
+  --hue: 210; /* A cooler, more professional blue for accents */
+  --background: hsl(210 20% 96%); /* A cool, silver-gray base */
+  --foreground: hsl(220 15% 20%); /* A strong, charcoal text color */
+  --primary: hsl(var(--hue) 70% 50%); /* A desaturated accent blue */
+  --primary-fg: hsl(0 0% 100%);
+  --muted: hsl(210 20% 92%);
+  --muted-fg: hsl(220 10% 40%);
+  --code-bg: hsl(210 20% 93%);
+  --code-fg: hsl(210 30% 25%);
+  --success: hsl(160 84% 39%);
+  --warning: hsl(45 100% 51%);
+  --danger:  hsl(0 84% 60%);
+
+  /* Frosted Metal & Crisp Shadows */
+  --glass: 245, 246, 248; /* Off-white/silver base for panels */
+  --glass-alpha: 0.7; /* More opaque, less "glassy" */
+  --glass-blur: 12px;
+  --glass-border: 180, 185, 190;
+  --elev-1: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+  --elev-2: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
+
+  /* Subtle "Brushed Metal" Background Gradient */
+  --bg-grad: linear-gradient(to bottom, hsl(210 15% 98%), hsl(210 15% 92%));
+}
+
+/* =================================
+   DARK THEME (Charcoal/Slate)
+   ================================= */
+.dark :root {
+  --background: hsl(220 15% 12%);
+  --foreground: hsl(210 20% 95%);
+  --muted: hsl(220 15% 18%);
+  --muted-fg: hsl(220 10% 65%);
+  --code-bg: hsl(220 15% 16%);
+  --code-fg: hsl(210 15% 85%);
+  --glass: 30, 33, 40;
+  --glass-alpha: 0.5;
+  --bg-grad: linear-gradient(to bottom, hsl(220 15% 15%), hsl(220 15% 10%));
+}
+
+/* ===============================
+   TAILWIND THEME BRIDGE
+   =============================== */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-noto-serif);
+  --font-mono: var(--font-roboto-mono);
+}
+
+/* ===============================
+   BASE & TYPOGRAPHY
+   =============================== */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 17.5px;
+  scroll-behavior: smooth;
+}
+html, body {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  padding: 0.5rem;
+  color: var(--foreground);
+  background: var(--bg-grad), var(--background);
+  background-attachment: fixed;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 640px) {
+  body {
+    padding: 1rem;
+  }
+}
+
+::selection {
+  background: hsl(var(--hue) 100% 50% / 0.25);
+  color: inherit;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: text-decoration-color 200ms ease, color 200ms ease;
+}
+a:hover { text-decoration: underline; }
+
+/* Refined Typographic Scale */
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+h1, h2 {
+  margin-block: 2.5rem 1.25rem;
+}
+h1 { font-size: 3rem; font-weight: 700; }
+h2 { font-size: 2rem; font-weight: 600; }
+
+/* PIXEL-PERFECT FIX: A more compact h3 for UI elements */
+h3 {
+  font-size: 1.25rem; /* Reduced size for UI headings */
+  font-weight: 600;
+  margin-block: 2rem 1rem; /* Reduced vertical margins */
+}
+
+p { margin-block: 0 1.5rem; }
+
+/* ===============================
+   CUSTOM UTILITIES: TITANIUM
+   =============================== */
+@layer utilities {
+  .glass {
+    background: rgb(var(--glass) / var(--glass-alpha));
+    backdrop-filter: blur(var(--glass-blur)) saturate(110%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(110%);
+    box-shadow: var(--elev-1);
+    border: 1px solid rgb(var(--glass-border) / 0.3);
+    border-radius: 20px;
+  }
+
+  .glass-outline {
+    position: relative;
+  }
+  .glass-outline::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    pointer-events: none;
+    background: linear-gradient(to bottom right, hsl(210 15% 100% / 0.5), transparent 50%);
+    padding: 1px;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+}
+
+/* ===============================
+   CODE STYLES
+   =============================== */
+pre, code {
+  font-family: var(--font-roboto-mono), ui-monospace, monospace;
+}
+pre {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  overflow: auto;
+  border: 1px solid rgb(var(--glass-border) / 0.5);
+}
+code {
+  background: var(--code-bg);
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--glass-border) / 0.4);
+}
