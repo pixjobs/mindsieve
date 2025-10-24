@@ -32,7 +32,7 @@ export const EMBEDDING_MODEL_NAME =
   process.env.EMBEDDING_MODEL_NAME || 'text-embedding-005';
 
 export const GENERATIVE_MODEL_NAME =
-  process.env.GENERATIVE_MODEL_NAME || 'gemini-2.5-pro';
+  process.env.GENERATIVE_MODEL_NAME || 'gemini-2.5-flash';
 
 // Distiller model for study cards (fast)
 export const CARD_MODEL_NAME =

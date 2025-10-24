@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gsap } from 'gsap';
+import { TagIcon } from '@heroicons/react/24/outline';
 
 export type StudyCard = {
   id: string;
@@ -19,31 +20,60 @@ export type StudyCard = {
 };
 
 type CardsApiResponse =
-  | { cards: StudyCard[]; nextCursor?: number } // legacy
-  | { cards: StudyCard[]; cursorCreatedAt?: number; cursorId?: string }; // new
+  | { cards: StudyCard[]; nextCursor?: number }
+  | { cards: StudyCard[]; cursorCreatedAt?: number; cursorId?: string };
 
-// Accents
 const cardColors = [
-  'from-blue-400 to-cyan-400',
-  'from-green-400 to-teal-400',
-  'from-purple-400 to-indigo-400',
-  'from-pink-400 to-rose-400',
-  'from-orange-400 to-amber-400',
+  'from-sky-400 to-cyan-400',
+  'from-teal-400 to-emerald-400',
+  'from-indigo-400 to-violet-400',
+  'from-rose-400 to-pink-400',
+  'from-amber-400 to-orange-400',
 ];
 
 function CardTile({ card, index }: { card: StudyCard; index: number }) {
   const colorClass = cardColors[index % cardColors.length];
+
   return (
-    <div className="ms-card relative rounded-xl bg-white/60 p-4 border border-black/10 overflow-hidden" data-key={card.id}>
+    <div
+      className="ms-card relative rounded-xl bg-muted/70 p-4 border [border-color:rgb(var(--glass-border)/0.35)] overflow-hidden hover:bg-muted/80 transition-colors"
+      data-key={card.id}
+    >
       <div className={`absolute top-0 left-0 h-1 w-full bg-gradient-to-r ${colorClass}`} />
-      <div className="text-xs text-[--muted-fg] mb-1.5">{new Date(card.createdAt).toLocaleString()}</div>
-      <h3 className="font-semibold text-[--foreground] mt-0 mb-2 line-clamp-2">{card.topic}</h3>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
+        {new Date(card.createdAt).toLocaleString()}
+      </div>
+
+      <h3 className="font-semibold text-foreground mt-0 mb-2 line-clamp-2">
+        {card.topic}
+      </h3>
+
       {!!card.bullets?.length && (
-        <ul className="text-sm text-[--foreground] list-disc ml-4 space-y-1">
+        <ul className="text-sm text-foreground/90 list-disc ml-4 space-y-1 mt-3">
           {card.bullets.slice(0, 3).map((b, i) => (
             <li key={i}>{b}</li>
           ))}
         </ul>
+      )}
+
+      {/* --- NEW: Display Key Terms as Badges --- */}
+      {!!card.keyTerms?.length && (
+        <div className="mt-4 pt-3 border-t [border-color:rgb(var(--glass-border)/0.2)]">
+          <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+            <TagIcon className="w-3.5 h-3.5" />
+            Key Terms
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {card.keyTerms.slice(0, 4).map((term, i) => (
+              <span
+                key={i}
+                className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full"
+              >
+                {term}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -52,22 +82,16 @@ function CardTile({ card, index }: { card: StudyCard; index: number }) {
 export default function CardsPanel({ sessionId }: { sessionId: string | null }) {
   const [cards, setCards] = useState<StudyCard[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Cursors (support both styles)
   const cursorRef = useRef<{ legacy?: number; createdAt?: number; id?: string } | null>(null);
-
-  // For GSAP: remember which IDs we’ve already rendered
   const seenIdsRef = useRef<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Reset when session changes
   useEffect(() => {
     setCards([]);
     cursorRef.current = null;
     seenIdsRef.current = new Set();
   }, [sessionId]);
 
-  // Fetch a single page (with whichever cursor we currently have)
   const fetchPage = async (limit = 60) => {
     if (!sessionId) return { got: 0, hasMore: false };
     const url = new URL('/api/cards', location.origin);
@@ -86,7 +110,6 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
 
     const json: CardsApiResponse = await res.json();
 
-    // De-dupe by id and append
     const byId = new Map<string, StudyCard>();
     for (const c of cards) byId.set(c.id, c);
     let newCount = 0;
@@ -99,7 +122,6 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
     const merged = Array.from(byId.values());
     setCards(merged);
 
-    // Advance cursor (support both response styles)
     let hasMore = false;
     if ('nextCursor' in json && json.nextCursor != null) {
       cursorRef.current = { legacy: json.nextCursor };
@@ -115,28 +137,23 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
     return { got: newCount, hasMore };
   };
 
-  // Full refresh: page until we reach a cap or no more data
   const refresh = async () => {
     if (!sessionId || loading) return;
     setLoading(true);
     try {
-      // Start from scratch for a hard refresh
       cursorRef.current = null;
       setCards([]);
       let pages = 0;
-      let total = 0;
       do {
-        const { got, hasMore } = await fetchPage(80);
-        total += got;
+        const { hasMore } = await fetchPage(80);
         pages++;
-        if (!hasMore || pages >= 4) break; // up to ~320 cards on first load
+        if (!hasMore || pages >= 4) break;
       } while (true);
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial load + listen for “cards:updated”
   useEffect(() => {
     if (!sessionId) return;
     refresh();
@@ -145,7 +162,6 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
     return () => window.removeEventListener('cards:updated', onUpdate);
   }, [sessionId]);
 
-  // GSAP animation: only animate truly new cards by ID
   useLayoutEffect(() => {
     if (!containerRef.current || loading) return;
 
@@ -164,20 +180,19 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
 
     const ctx = gsap.context(() => {
       gsap.from(newEls, {
-        y: -100,
-        x: (i) => (i % 2 === 0 ? 30 : -30),
-        rotation: (i) => (i % 2 === 0 ? 15 : -15),
+        y: -80,
+        x: (i) => (i % 2 === 0 ? 24 : -24),
+        rotation: (i) => (i % 2 === 0 ? 10 : -10),
         opacity: 0,
-        duration: 0.8,
+        duration: 0.7,
         ease: 'power3.out',
-        stagger: { each: 0.08, from: 'start' },
+        stagger: { each: 0.06, from: 'start' },
       });
     }, containerRef);
 
     return () => ctx.revert();
   }, [cards, loading]);
 
-  // Non-mutating sort (newest first)
   const sortedCards = useMemo(() => {
     return [...cards].sort((a, b) => b.createdAt - a.createdAt);
   }, [cards]);
@@ -185,14 +200,16 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
   return (
     <div className="flex flex-col h-full w-full">
       <header className="p-4 flex-shrink-0">
-        <h3 className="text-lg font-serif font-bold text-[--foreground]">Study Cards</h3>
+        <h3 className="text-base font-serif font-semibold text-foreground m-0">Study Cards</h3>
       </header>
 
       <div ref={containerRef} className="flex-grow overflow-y-auto px-4 pb-4 space-y-3">
-        {loading && <div className="text-center text-sm text-[--muted-fg] pt-4">Loading Cards...</div>}
+        {loading && (
+          <div className="text-center text-sm text-muted-foreground pt-4">Loading cards…</div>
+        )}
 
         {!loading && sortedCards.length === 0 && (
-          <div className="text-center text-sm text-[--muted-fg] bg-black/5 border border-black/5 rounded-lg p-6">
+          <div className="text-center text-sm text-muted-foreground bg-muted/60 border [border-color:rgb(var(--glass-border)/0.35)] rounded-lg p-6">
             Your generated study cards will appear here automatically.
           </div>
         )}
@@ -200,12 +217,11 @@ export default function CardsPanel({ sessionId }: { sessionId: string | null }) 
         {!loading &&
           sortedCards.map((card, index) => <CardTile key={card.id} card={card} index={index} />)}
 
-        {/* Optional: load more older cards on click */}
         {!loading && cursorRef.current && (
           <div className="pt-2">
             <button
               onClick={() => fetchPage(80)}
-              className="mx-auto block text-xs px-3 py-1.5 rounded border border-black/10 bg-white/50 hover:bg-white/70"
+              className="mx-auto block text-xs px-3 py-1.5 rounded border [border-color:rgb(var(--glass-border)/0.35)] bg-muted/70 hover:bg-muted/80 text-foreground transition-colors"
             >
               Load more
             </button>
