@@ -2,6 +2,7 @@
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
+import { GoogleAuth } from 'google-auth-library';
 import { IS_CLOUD_RUN, FORCE_SYNC } from '@/lib/env';
 import * as config from '@/config';
 import { generateAndStoreCard } from '@/server/cards/generate';
@@ -16,9 +17,51 @@ type EnqueuePayload = {
   ownerUid?: string | null;
 };
 
+// ---- Cloud Tasks (REST) ----
+async function enqueueViaRest(payload: any) {
+  const project = process.env.GCP_PROJECT_ID!;
+  const location = config.TASKS_LOCATION;        // e.g. "europe-west1"
+  const queue = config.TASKS_QUEUE;              // e.g. "card-jobs"
+  const handlerUrl = config.TASKS_HANDLER_URL!;  // full https to /api/cards/worker
+
+  const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+  const token = await auth.getAccessToken();
+
+  const body = {
+    task: {
+      httpRequest: {
+        httpMethod: 'POST',
+        url: handlerUrl,
+        headers: { 'Content-Type': 'application/json' },
+        body: Buffer.from(JSON.stringify(payload)).toString('base64'),
+        ...(process.env.TASKS_SA_EMAIL
+          ? { oidcToken: { serviceAccountEmail: process.env.TASKS_SA_EMAIL, audience: handlerUrl } }
+          : {}),
+      },
+    },
+  };
+
+  const endpoint = `https://cloudtasks.googleapis.com/v2/projects/${project}/locations/${location}/queues/${queue}/tasks`;
+  const resp = await fetch(endpoint, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    throw new Error(`Cloud Tasks REST ${resp.status}: ${txt}`);
+  }
+  return resp.json();
+}
+
 export async function POST(req: Request) {
-  const payload = (await req.json()) as EnqueuePayload;
-  const isAsync = IS_CLOUD_RUN && !FORCE_SYNC;
+  let payload: EnqueuePayload;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+  }
 
   // Basic validation
   if (!payload?.sessionId) {
@@ -31,59 +74,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'answer & sources required' }, { status: 400 });
   }
 
-  // ✅ Local dev (or forced sync): generate now
-  if (!isAsync) {
+  const doAsync = IS_CLOUD_RUN && !FORCE_SYNC;
+
+  // Try async enqueue first (Cloud Run), then sync fallback
+  if (doAsync) {
     try {
-      const result = await generateAndStoreCard(payload);
-      return NextResponse.json({ ok: true, mode: 'sync', ...result });
+      const task = await enqueueViaRest(payload);
+      return NextResponse.json({ ok: true, mode: 'async', task });
     } catch (e: any) {
-      console.error('[cards/enqueue] sync failed', e);
-      return NextResponse.json(
-        { ok: false, error: 'sync-failed', details: e?.message || 'unknown' },
-        { status: 500 }
-      );
+      console.warn('[cards/enqueue] REST enqueue failed; falling back to sync', e?.message || e);
     }
   }
 
-  // 🚀 Cloud Run: enqueue to Cloud Tasks (dynamic import to avoid Next bundling errors)
+  // Sync path
   try {
-    const { CloudTasksClient } = await import('@google-cloud/tasks');
-    const client = new CloudTasksClient();
-
-    const parent = client.queuePath(
-      process.env.GCP_PROJECT_ID!,
-      config.TASKS_LOCATION,
-      config.TASKS_QUEUE
-    );
-
-    const handlerUrl = config.TASKS_HANDLER_URL!;
-    const bodyJson = JSON.stringify(payload);
-
-    const taskReq: any = {
-      parent,
-      task: {
-        httpRequest: {
-          httpMethod: 'POST',
-          url: handlerUrl,
-          headers: { 'Content-Type': 'application/json' },
-          body: Buffer.from(bodyJson).toString('base64'),
-        },
-      },
-    };
-
-    if (process.env.TASKS_SA_EMAIL) {
-      taskReq.task.httpRequest.oidcToken = {
-        serviceAccountEmail: process.env.TASKS_SA_EMAIL,
-        audience: handlerUrl,
-      };
-    }
-
-    const [task] = await client.createTask(taskReq);
-    return NextResponse.json({ ok: true, mode: 'async', name: task.name });
+    const result = await generateAndStoreCard(payload);
+    return NextResponse.json({ ok: true, mode: 'sync', ...result });
   } catch (e: any) {
-    console.error('[cards/enqueue] async enqueue failed', e);
+    console.error('[cards/enqueue] sync failed', e);
     return NextResponse.json(
-      { ok: false, error: 'enqueue-failed', details: e?.message || 'unknown' },
+      { ok: false, error: 'sync-failed', details: e?.message || 'unknown' },
       { status: 500 }
     );
   }
