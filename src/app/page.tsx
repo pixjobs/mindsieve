@@ -1,13 +1,29 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  type ReactElement,
+} from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import { PaperAirplaneIcon, ClipboardIcon, CheckIcon, ArrowPathIcon, SparklesIcon } from '@heroicons/react/24/solid';
+import {
+  PaperAirplaneIcon,
+  ClipboardIcon,
+  CheckIcon,
+  ArrowPathIcon,
+  SparklesIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/solid';
 import { gsap } from 'gsap';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import SplitType from 'split-type';
 import CardsPanel from '@/components/CardsPanel';
+import StarfieldGrid from '@/components/StarfieldGrid';
 
 // ----------------- Types -----------------
 interface Source {
@@ -26,147 +42,252 @@ interface Message {
   isStreaming?: boolean;
 }
 
-// ----------------- "Fancy" UI Components -----------------
+// ----------------- Utils -----------------
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
-// FINAL VERSION: The dynamic, animated logo component
-const AnimatedLogo = () => {
-  const containerRef = useRef<HTMLSpanElement>(null);
-  const emojis = ['🧠', '💡', '❓', '📚', '⚡️'];
+// ======================================================================
+// Particle Logo (header)
+// ======================================================================
+const ParticleLogo = memo(function ParticleLogo(): ReactElement {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particles = useRef<any[]>([]);
+  const animationState = useRef<'intro' | 'idle' | 'streaming'>('intro');
+  const visualState = useRef({ particleAlpha: 1, textAlpha: 0, haloSize: 0 });
+  const rafRef = useRef<number>(0);
 
-  useLayoutEffect(() => {
-    if (!containerRef.current) return;
-    const emojiElements = Array.from(containerRef.current.children);
-    gsap.set(emojiElements, { opacity: 0, scale: 0.8, y: 10 }); // Initial state
+  useIsomorphicLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    const tl = gsap.timeline({ repeat: -1 });
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
 
-    emojiElements.forEach((emoji) => {
-      tl.to(emoji, {
-        opacity: 1,
-        scale: 1,
-        y: 0,
-        duration: 0.4,
-        ease: 'power3.inOut',
-      }).to(
-        emoji,
-        {
-          opacity: 0,
-          scale: 0.8,
-          y: -10,
-          duration: 0.4,
-          ease: 'power3.inOut',
+    const width = rect.width;
+    const height = rect.height;
+    const isSmall = width < 480;
+    const particleCount = isSmall ? 800 : 1600;
+    const colors = ['#cbd5e1', '#94a3b8', '#64748b', '#475569'];
+
+    const fontSize = Math.max(32, Math.min(height * 0.7, 72));
+    const text = 'Mindsieve';
+    const font = `bold ${fontSize}px ui-sans-serif, system-ui, -apple-system, sans-serif`;
+    let textWidth = 0;
+    let textX = 0;
+    let textY = 0;
+
+    class Particle {
+      x: number; y: number; originX: number; originY: number;
+      vx: number; vy: number; size: number; color: string;
+      friction: number; ease: number;
+
+      constructor(x: number, y: number) {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.originX = x; this.originY = y;
+        this.vx = 0; this.vy = 0;
+        this.size = Math.random() * 1.4 + 0.4;
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.friction = 0.92;
+        this.ease = 0.06 + Math.random() * 0.04;
+      }
+      update() {
+        this.vx += (this.originX - this.x) * this.ease;
+        this.vy += (this.originY - this.y) * this.ease;
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (animationState.current === 'idle') {
+          const idleForceX = Math.sin(Date.now() * 0.0008 + this.originY * 0.05) * 0.05;
+          const idleForceY = Math.cos(Date.now() * 0.0008 + this.originX * 0.05) * 0.05;
+          this.x += idleForceX;
+          this.y += idleForceY;
+        } else if (animationState.current === 'streaming') {
+          this.x += (Math.random() - 0.5) * 0.7;
+          this.y += (Math.random() - 0.5) * 0.7;
+        }
+      }
+      draw(context: CanvasRenderingContext2D) {
+        context.fillStyle = this.color;
+        context.beginPath();
+        context.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+
+    const init = () => {
+      const tempCtx = document.createElement('canvas').getContext('2d');
+      if (!tempCtx) return;
+      tempCtx.canvas.width = width;
+      tempCtx.canvas.height = height;
+      
+      tempCtx.font = font;
+      textWidth = tempCtx.measureText(text).width;
+      textX = (width - textWidth) / 2;
+      textY = (height + fontSize * 0.35) / 2;
+
+      tempCtx.fillStyle = 'black';
+      tempCtx.fillText(text, textX, textY);
+      
+      const imageData = tempCtx.getImageData(0, 0, width, height).data;
+      const pts: { x: number; y: number }[] = [];
+      const step = isSmall ? 3 : 2;
+      for (let y = 0; y < height; y += step) {
+        for (let x = 0; x < width; x += step) {
+          if (imageData[(y * width + x) * 4 + 3] > 128) pts.push({ x, y });
+        }
+      }
+      particles.current = Array.from({ length: particleCount }, (_, i) => {
+        const p = pts[i % pts.length];
+        return new Particle(p.x, p.y);
+      });
+    };
+
+    const loop = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      if (visualState.current.textAlpha > 0) {
+        ctx.globalAlpha = visualState.current.textAlpha;
+        ctx.font = font;
+        
+        ctx.shadowColor = 'rgba(165, 180, 252, 0.7)';
+        if (animationState.current === 'idle' || animationState.current === 'streaming') {
+          ctx.shadowBlur = visualState.current.haloSize + Math.sin(Date.now() * 0.0025) * 3;
+        } else {
+          ctx.shadowBlur = visualState.current.haloSize;
+        }
+        
+        ctx.fillStyle = '#e0e7ff';
+        ctx.fillText(text, textX, textY);
+
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'transparent';
+      }
+
+      if (visualState.current.particleAlpha > 0) {
+        ctx.globalAlpha = visualState.current.particleAlpha;
+        for (const p of particles.current) {
+          p.update();
+          p.draw(ctx);
+        }
+      }
+      
+      ctx.globalAlpha = 1;
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    init();
+    rafRef.current = requestAnimationFrame(loop);
+
+    const handleStreamStart = () => { animationState.current = 'streaming'; };
+    const handleStreamEnd = () => { animationState.current = 'idle'; };
+    const onVisibility = () => {
+      if (document.hidden) cancelAnimationFrame(rafRef.current);
+      else rafRef.current = requestAnimationFrame(loop);
+    };
+
+    window.addEventListener('llm-stream-start', handleStreamStart);
+    window.addEventListener('llm-stream-end', handleStreamEnd);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Initial animation sequence
+    gsap.fromTo(
+      particles.current,
+      {
+        x: () => (Math.random() < 0.5 ? -50 : canvas.clientWidth + 50),
+        y: () => (Math.random() < 0.5 ? -50 : canvas.clientHeight + 50),
+      },
+      {
+        x: (i, p) => p.originX,
+        y: (i, p) => p.originY,
+        ease: 'power3.out',
+        duration: 2.0,
+        stagger: { each: 0.003, from: 'random' },
+      }
+    );
+
+    gsap.timeline({ delay: 1.6 })
+      .to(visualState.current, {
+        particleAlpha: 0,
+        duration: 0.8,
+        ease: 'power2.inOut',
+      })
+      .to(visualState.current, {
+        textAlpha: 1,
+        haloSize: 20,
+        duration: 1.2,
+        ease: 'power3.out',
+        onComplete: () => {
+          animationState.current = 'idle';
         },
-        '+=1.5' // Hold each emoji for 1.5 seconds
-      );
-    });
-  }, []);
-
-  return (
-    <span ref={containerRef} className="relative inline-block w-10 h-10 mx-2 text-3xl">
-      {emojis.map((emoji, i) => (
-        <span
-          key={i}
-          // PIXEL-PERFECT FIX: Added text-gray-800 to make the emoji visible
-          className="absolute inset-0 flex items-center justify-center text-gray-800 opacity-0 scale-80 transform-gpu"
-        >
-          {emoji}
-        </span>
-      ))}
-    </span>
-  );
-};
-
-const WelcomeAnimation = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const puzzlePieces = "Mindsieve queries Google Gemini for generative answers and simultaneously performs hybrid search on an Elasticsearch vector database of arXiv papers. This provides grounded, accurate, and up-to-date responses for any Computer Science topic.".split(' ');
-
-  useLayoutEffect(() => {
-    const ctx = gsap.context(() => {
-      const title = new SplitType('.split-title', { types: 'chars' });
-      gsap.set(title.chars, { opacity: 0, y: 20 });
-      gsap.set('.welcome-fade-in', { opacity: 0, y: 15 });
-      const tl = gsap.timeline();
-      tl.fromTo('.puzzle-piece',
-        { opacity: 0, scale: 0.8, x: () => gsap.utils.random(-200, 200, 10), y: () => gsap.utils.random(-150, 150, 10), rotation: () => gsap.utils.random(-90, 90) },
-        { opacity: 1, scale: 1, x: 0, y: 0, rotation: 0, duration: 1.2, ease: 'power3.out', stagger: { each: 0.03, from: 'random' } }
-      )
-      .to(title.chars, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', stagger: { each: 0.05, from: 'start' } }, "-=0.5")
-      .to('.welcome-fade-in', { opacity: 1, y: 0, duration: 0.5, stagger: 0.15 }, "-=0.5");
-    }, containerRef);
+      }, '-=0.6');
 
     return () => {
-      ctx.revert();
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener('llm-stream-start', handleStreamStart);
+      window.removeEventListener('llm-stream-end', handleStreamEnd);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
+  return <canvas ref={canvasRef} className="w-full h-12 md:h-16" aria-hidden />;
+});
+
+// ======================================================================
+// Chat UI Sub-components
+// ======================================================================
+const StreamingIndicator = memo(function StreamingIndicator(): ReactElement {
   return (
-    <div ref={containerRef} className="text-center text-[--muted-fg] py-8 px-4 flex flex-col items-center justify-center h-full">
-      <SparklesIcon className="welcome-fade-in w-16 h-16 text-transparent bg-clip-text bg-gradient-to-b from-gray-400 to-gray-700 mb-4" />
-      <h2 className="split-title text-2xl font-serif font-bold text-[--foreground] mb-4">Welcome to Mindsieve</h2>
-      <p className="max-w-xl mb-6 relative h-36">
-        {puzzlePieces.map((word, i) => (
-          <span key={i} className="puzzle-piece inline-block mr-1.5 opacity-0">{word}</span>
-        ))}
-      </p>
-      <div className="welcome-fade-in text-sm text-[--muted-fg]">
-        <p className="font-semibold mb-2">Try asking:</p>
-        <ul className="space-y-1 list-inside">
-          <li>"Explain the transformer architecture"</li>
-          <li>"What are the key optimizations for LLM inference?"</li>
-        </ul>
-      </div>
+    <div className="flex items-center gap-2" role="status" aria-live="polite">
+      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+      <span className="text-sm text-muted-foreground">Generating…</span>
     </div>
   );
-};
+});
 
-const StreamingIndicator = () => {
-  const orbRef = useRef(null);
-  useLayoutEffect(() => {
-    const tl = gsap.timeline({ repeat: -1, yoyo: true });
-    tl.to(orbRef.current, { scale: 1.3, opacity: 0.5, duration: 0.8, ease: 'power1.inOut' });
-
-    return () => {
-      tl.kill();
-    };
-  }, []);
+const SubmitButton = memo(function SubmitButton({ pending }: { pending: boolean }): ReactElement {
   return (
-    <div className="flex items-center gap-2">
-      <div ref={orbRef} className="w-2 h-2 rounded-full bg-[--color-primary]" />
-      <span className="text-sm text-[--muted-fg]">Generating...</span>
-    </div>
+    <button
+      type="submit"
+      disabled={pending}
+      className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-primary text-primary-foreground disabled:bg-gray-400 disabled:cursor-not-allowed hover:scale-110 active:scale-100 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+      aria-label={pending ? 'Sending…' : 'Send message'}
+    >
+      {pending ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <PaperAirplaneIcon className="w-5 h-5" />}
+    </button>
   );
-};
+});
 
-const SubmitButton = ({ pending }: { pending: boolean }) => (
-  <button
-    type="submit"
-    disabled={pending}
-    className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[--color-primary] text-white disabled:bg-gray-400 disabled:cursor-not-allowed hover:scale-110 active:scale-100 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[--color-primary]"
-    aria-label="Send message"
-  >
-    {pending ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <PaperAirplaneIcon className="w-5 h-5" />}
-  </button>
-);
-
-const SourcesDisplay = ({ sources }: { sources: Source[] }) => {
+const SourcesDisplay = memo(function SourcesDisplay({ sources }: { sources: Source[] }): ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(true);
-  if (!sources || sources.length === 0) return null;
+  if (!sources?.length) return null;
   return (
-    <div className="mt-5 border-t border-[--glass-border]/30 pt-4">
-      <button onClick={() => setIsExpanded(!isExpanded)} className="text-sm font-semibold text-[--muted-fg] mb-3 flex items-center gap-1.5">
+    <div className="mt-5 border-t [border-color:rgb(var(--glass-border)/0.3)] pt-4">
+      <button
+        onClick={() => setIsExpanded((s) => !s)}
+        className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"
+        aria-expanded={isExpanded}
+      >
         Sources {isExpanded ? '▼' : '▶'}
       </button>
       {isExpanded && (
         <div className="space-y-4">
           {sources.map((source) => (
             <div key={source.id} className="text-sm animate-fade-in">
-              <a href={source.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-[--foreground] hover:text-[--color-primary] transition-colors">
-                <span className="text-[--color-primary] mr-2">[{source.id}]</span>
+              <a href={source.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-foreground hover:text-primary transition-colors">
+                <span className="text-primary mr-2">[{source.id}]</span>
                 {source.title}
               </a>
-              <p className="text-[--muted-fg] italic mt-1 text-xs pl-6" dangerouslySetInnerHTML={{ __html: source.snippet }} />
+              <p className="text-muted-foreground italic mt-1 text-xs pl-6" dangerouslySetInnerHTML={{ __html: source.snippet }} />
               {source.arxiv_id && (
-                <a href={`https://arxiv.org/abs/${source.arxiv_id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[--color-primary] hover:underline mt-1 inline-block pl-6 font-medium">
+                <a href={`https://arxiv.org/abs/${source.arxiv_id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block pl-6 font-medium">
                   View on arXiv
                 </a>
               )}
@@ -176,38 +297,35 @@ const SourcesDisplay = ({ sources }: { sources: Source[] }) => {
       )}
     </div>
   );
-};
+});
 
-function ChatMessage({ message }: { message: Message }) {
+const ChatMessage = memo(function ChatMessage({ message }: { message: Message }): ReactElement {
   const isUser = message.role === 'user';
   const [hasCopied, setHasCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content);
     toast.success('Copied to clipboard!');
-    setTimeout(() => setHasCopied(false), 2000);
-  };
+    setHasCopied(true);
+    setTimeout(() => setHasCopied(false), 1600);
+  }, [message.content]);
 
-  const renderContent = (content: string) => {
-    let displayContent = content;
-    if (content.includes('|||META|||')) {
-      displayContent = content.substring(content.indexOf('|||META|||') + 9).trim();
-    }
-    const sanitizedContent = displayContent.replace(/\[(\d+)\]/g, '**[$1]**');
-    return (
-      <div className="prose prose-sm md:prose-base max-w-none text-[--foreground] prose-p:leading-relaxed prose-headings:font-serif prose-headings:mb-2 prose-headings:mt-4 prose-a:text-[--color-primary] prose-strong:text-[--foreground]">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizedContent}</ReactMarkdown>
-      </div>
-    );
-  };
+  const renderedContent = useMemo(() => {
+    const raw = message.content;
+    const displayContent = raw.includes('|||META|||') ? raw.substring(raw.indexOf('|||META|||') + 9).trim() : raw;
+    const sanitized = displayContent.replace(/\[(\d+)\]/g, '**[$1]**');
+    return <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitized}</ReactMarkdown>;
+  }, [message.content]);
 
   return (
     <div className={`animate-fade-in ${isUser ? 'flex justify-end' : ''}`}>
-      <div className={`group relative p-4 rounded-2xl max-w-2xl ${isUser ? 'bg-gray-800 text-gray-50 shadow-lg' : 'glass'}`}>
+      <div className={`group relative p-4 rounded-2xl max-w-2xl ${isUser ? 'bg-muted text-foreground shadow-lg' : 'glass'}`}>
         {message.isStreaming && !message.content && <StreamingIndicator />}
-        {renderContent(message.content)}
+        <div className="prose prose-sm md:prose-base max-w-none text-foreground prose-p:leading-relaxed prose-headings:font-serif prose-headings:mb-2 prose-headings:mt-4 prose-a:text-primary prose-strong:text-foreground">
+          {renderedContent}
+        </div>
         {!isUser && !message.isStreaming && message.content && (
-          <button onClick={handleCopy} className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/5 text-[--muted-fg] opacity-0 group-hover:opacity-100 transition-opacity" title="Copy answer">
+          <button onClick={handleCopy} className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" title="Copy answer" aria-label="Copy answer">
             {hasCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <ClipboardIcon className="w-4 h-4" />}
           </button>
         )}
@@ -215,10 +333,12 @@ function ChatMessage({ message }: { message: Message }) {
       </div>
     </div>
   );
-}
+});
 
-// ----------------- Session bootstrap -----------------
-function useSession() {
+// ======================================================================
+// Session Hook & Main Page Component
+// ======================================================================
+function useSession(): string | null {
   const [sessionId, setSessionId] = useState<string | null>(null);
   useEffect(() => {
     const boot = async () => {
@@ -242,87 +362,126 @@ function useSession() {
   return sessionId;
 }
 
-// ----------------- Main Page -----------------
-export default function ChatPage() {
+export default function ChatPage(): ReactElement {
   const sessionId = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
+  const [showCardsMobile, setShowCardsMobile] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!inputRef.current?.value.trim() || !sessionId || isSubmitting) return;
-    const query = inputRef.current.value.trim();
-    formRef.current?.reset();
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: query };
-    const assistantId = crypto.randomUUID();
-    setCurrentTurnId(assistantId);
-    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', sources: [], isStreaming: true };
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setIsSubmitting(true);
-    try {
-      await fetch('/api/turns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, userQuery: query, assistantId }) });
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, sessionId, turnId: assistantId }) });
-      if (!response.ok || !response.body) throw new Error(await response.text() || 'Failed to get response');
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let sources: Source[] = [];
-      let sourcesReceived = false;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        if (!sourcesReceived && buffer.includes('|||SOURCES|||')) {
-          const parts = buffer.split('|||SOURCES|||');
-          try { sources = JSON.parse(parts[0]); } catch { /* ignore */ }
-          buffer = parts.slice(1).join('|||SOURCES|||');
-          sourcesReceived = true;
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const query = inputRef.current?.value.trim();
+      if (!query || !sessionId || isSubmitting) return;
+
+      formRef.current?.reset();
+
+      const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: query };
+      const assistantId = crypto.randomUUID();
+      const assistantMsg: Message = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        sources: [],
+        isStreaming: true,
+      };
+
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setIsSubmitting(true);
+      window.dispatchEvent(new CustomEvent('llm-stream-start'));
+
+      try {
+        await fetch('/api/turns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, userQuery: query, assistantId }),
+        });
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, sessionId, turnId: assistantId }),
+        });
+
+        if (!response.ok || !response.body)
+          throw new Error((await response.text()) || 'Failed to get response');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let sources: Source[] = [];
+        let sourcesReceived = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          if (!sourcesReceived && buffer.includes('|||SOURCES|||')) {
+            const parts = buffer.split('|||SOURCES|||');
+            try {
+              sources = JSON.parse(parts[0]);
+            } catch { /* ignore malformed payload */ }
+            buffer = parts.slice(1).join('|||SOURCES|||');
+            sourcesReceived = true;
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: buffer, sources, isStreaming: true } : m
+            )
+          );
         }
-        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: buffer, sources, isStreaming: true } : m)));
-      }
-      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, isStreaming: false } : m)));
-      if (buffer.trim()) {
-        try {
-          const res = await fetch('/api/cards/enqueue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sessionId,
-              turnId: assistantId,
-              answer: buffer,
-              sources: (sources || []).map((s) => ({ id: s.id, title: s.title, arxiv_id: s.arxiv_id })),
-              topic: (buffer.match(/^(.{0,72})/)?.[0] || 'Study Topic').trim(),
-              fromQuery: query,
-            }),
-          });
-          if (!res.ok) throw new Error((await res.json())?.error || 'Failed to save card');
-          window.dispatchEvent(new CustomEvent('cards:updated'));
-        } catch (e: any) {
-          console.warn("Auto-card generation failed:", e.message);
+
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, isStreaming: false } : m))
+        );
+
+        if (buffer.trim()) {
+          try {
+            await fetch('/api/cards/enqueue', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId,
+                turnId: assistantId,
+                answer: buffer,
+                sources: (sources || []).map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  arxiv_id: s.arxiv_id,
+                })),
+                topic: (buffer.match(/^(.{0,72})/)?.[0] || 'Study Topic').trim(),
+                fromQuery: query,
+              }),
+            });
+            window.dispatchEvent(new CustomEvent('cards:updated'));
+          } catch (e: any) {
+            console.warn('Auto-card generation failed:', e.message);
+          }
         }
+      } catch (error: any) {
+        console.error(error);
+        toast.error(`Error: ${error.message}`);
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId && m.id !== userMsg.id));
+      } finally {
+        setIsSubmitting(false);
+        window.dispatchEvent(new CustomEvent('llm-stream-end'));
       }
-    } catch (error: any) {
-      console.error(error);
-      toast.error(`Error: ${error.message}`);
-      setMessages((prev) => prev.filter((m) => m.id !== assistantId && m.id !== userMsg.id));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    },
+    [isSubmitting, sessionId]
+  );
 
   return (
     <>
+      <StarfieldGrid dim={false} />
+
       <Toaster
         position="top-center"
         toastOptions={{
@@ -336,41 +495,79 @@ export default function ChatPage() {
           },
         }}
       />
-      <div className="flex flex-col h-screen">
-        <header className="text-center p-4 flex-shrink-0">
-          <h1 className="text-3xl md:text-4xl font-bold font-serif text-transparent bg-clip-text bg-gradient-to-b from-gray-400 to-gray-800 flex items-center justify-center">
-            <AnimatedLogo />
-            Mindsieve AI Tutor
-          </h1>
+
+      <div className="relative z-10 isolate flex flex-col h-screen">
+        <header className="text-center p-4 flex-shrink-0 flex items-center justify-center">
+          <div id="particle-logo-target" className="w-full max-w-xs md:max-w-md">
+            <ParticleLogo />
+          </div>
         </header>
-        <div className="flex flex-col md:flex-row gap-4 flex-1 overflow-hidden w-full max-w-7xl mx-auto">
-          <main className="flex-grow flex flex-col overflow-hidden rounded-2xl glass glass-outline">
+
+        <div className="relative flex flex-col md:flex-row gap-4 flex-1 overflow-hidden w-full max-w-7xl mx-auto">
+          <main className="flex-grow flex flex-col overflow-hidden rounded-2xl bg-transparent">
             <div className="flex-grow overflow-y-auto space-y-6 p-4 min-h-0">
-              {messages.length === 0 ? (
-                <WelcomeAnimation />
-              ) : (
-                messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
+              {messages.length === 0 && (
+                <div className="text-center text-muted-foreground py-8 px-4 flex flex-col items-center justify-center h-full">
+                  <SparklesIcon className="w-16 h-16 text-transparent bg-clip-text bg-gradient-to-b from-gray-400 to-gray-700 mb-4" />
+                  <h2 className="text-2xl font-serif font-bold text-foreground mb-4">
+                    Welcome to Mindsieve
+                  </h2>
+                  <p className="max-w-xl">
+                    Mindsieve provides grounded, accurate, and up-to-date responses for any
+                    Computer Science topic, helping you to re-engage with the subject you love.
+                  </p>
+                </div>
               )}
+
+              {messages.map((msg) => (
+                <ChatMessage key={msg.id} message={msg} />
+              ))}
+
               <div ref={messagesEndRef} className="h-1" />
             </div>
-            <footer className="p-4 border-t border-[--glass-border]/20 flex-shrink-0">
+
+            <footer className="p-4 border-t [border-color:rgb(var(--glass-border)/0.2)] flex-shrink-0">
               <form ref={formRef} onSubmit={handleSubmit} className="relative">
                 <input
                   ref={inputRef}
                   type="text"
                   name="query"
                   required
-                  placeholder="Ask about any computing topic, e.g., how virtual memory works"
-                  className="w-full h-14 px-6 pr-16 bg-white/50 border border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-[--color-primary] transition-all shadow-inner"
+                  placeholder="Ask about any computing topic…"
+                  className="w-full h-14 px-6 pr-16 bg-muted/70 border border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner text-foreground placeholder:text-muted-foreground"
                   disabled={!sessionId || isSubmitting}
+                  autoComplete="off"
                 />
                 <SubmitButton pending={isSubmitting} />
               </form>
             </footer>
           </main>
-          <aside className="w-full md:w-96 h-96 md:h-auto flex-shrink-0 rounded-2xl glass glass-outline overflow-hidden">
+
+          <aside className="hidden md:block md:w-96 flex-shrink-0 rounded-2xl glass glass-outline overflow-hidden">
             <CardsPanel sessionId={sessionId} />
           </aside>
+
+          <div className={`md:hidden fixed inset-0 z-30 transition-transform duration-300 ease-in-out ${showCardsMobile ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div className="flex flex-col h-full glass glass-outline overflow-hidden rounded-t-2xl">
+              <div className="p-4 border-b [border-color:rgb(var(--glass-border)/0.2)] flex-shrink-0 flex justify-between items-center">
+                <h2 className="font-bold text-lg">My Study Cards</h2>
+                <button onClick={() => setShowCardsMobile(false)} className="p-2 rounded-full hover:bg-muted/60" aria-label="Close study cards">
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+              <CardsPanel sessionId={sessionId} />
+            </div>
+          </div>
+        </div>
+
+        <div className="md:hidden absolute bottom-6 right-6 z-20">
+          <button
+            onClick={() => setShowCardsMobile((s) => !s)}
+            className="p-4 rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-110 active:scale-100 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            aria-label="Open study cards"
+          >
+            <SparklesIcon className="w-6 h-6" />
+          </button>
         </div>
       </div>
     </>
